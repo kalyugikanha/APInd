@@ -21,7 +21,17 @@ function encrypt(text: string): string {
 async function main() {
   console.log("Seeding Colladome platform database...");
 
-  // Clean old data
+  // Check if already seeded to protect production data
+  const existingAdmin = await prisma.user.findUnique({
+    where: { email: "admin@colladome.com" },
+  });
+
+  if (existingAdmin) {
+    console.log("ℹ️  Database already initialized with Super Admin (admin@colladome.com). Skipping seed wipe.");
+    return;
+  }
+
+  // Clean old data for fresh seed
   await prisma.bankReport.deleteMany();
   await prisma.panReport.deleteMany();
   await prisma.apiLog.deleteMany();
