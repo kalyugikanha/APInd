@@ -1,0 +1,261 @@
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// User / Client Accounts
+model User {
+  id              String          @id @default(uuid())
+  clientCode      String?         @unique // e.g. "CD-1001"
+  email           String          @unique
+  passwordHash    String
+  fullName        String
+  phone           String?
+  role            String          @default("CLIENT_ADMIN") // SUPER_ADMIN, ADMIN_STAFF, CLIENT_ADMIN, CLIENT_DEV
+  accountStatus   String          @default("ACTIVE")       // ACTIVE, INACTIVE, SUSPENDED, UNDER_REVIEW
+  kycStatus       String          @default("NOT_SUBMITTED") // NOT_SUBMITTED, PENDING, VERIFIED, REJECTED
+  billingModel    String          @default("PREPAID")      // PREPAID, POSTPAID
+  creditLimit     Float           @default(0.0)
+
+  // Company Profile
+  companyName     String?
+  brandName       String?
+  businessType    String?         // PVT_LTD, PUBLIC_LTD, LLP, PROPRIETORSHIP, INDIVIDUAL
+  businessPan     String?
+  gstin           String?
+  address         String?
+  city            String?
+  state           String?
+  pincode         String?
+
+  // Relations
+  wallet          Wallet?
+  apiKeys         ApiKey[]
+  clientSettings  ClientSetting?
+  pricingRules    ClientPricing[]
+  apiLogs         ApiLog[]
+  documents       ClientDocument[]
+  panReports      PanReport[]
+  bankReports     BankReport[]
+
+  internalNotes   String?
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+}
+
+model ClientDocument {
+  id              String          @id @default(uuid())
+  userId          String
+  user            User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  docType         String          // PAN_CARD, GSTIN_CERTIFICATE, INCORPORATION_CERT, CANCELLED_CHEQUE
+  fileName        String
+  fileUrl         String
+  status          String          @default("PENDING") // PENDING, VERIFIED, REJECTED
+  rejectionReason String?
+  createdAt       DateTime        @default(now())
+}
+
+model ClientSetting {
+  id              String          @id @default(uuid())
+  userId          String          @unique
+  user            User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  allowedIps      String          @default("[]") // JSON string array of IP/CIDRs
+  sandboxIps      String          @default("[]") // JSON string array of sandbox IPs
+  allowedDomains  String          @default("[]") // JSON string array of domains
+  webhookUrl      String?
+  webhookSecret   String?
+  lowBalanceAlert Float           @default(500.0)
+  alertEmail      String?
+  alertPhone      String?
+  rateLimitRpm    Int             @default(120)
+  isLiveEnabled   Boolean         @default(true)
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+}
+
+model Wallet {
+  id              String          @id @default(uuid())
+  userId          String          @unique
+  user            User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  balance         Float           @default(0.0)
+  currency        String          @default("INR")
+  lockedAmount    Float           @default(0.0)
+  transactions    WalletTransaction[]
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+}
+
+model WalletTransaction {
+  id              String          @id @default(uuid())
+  walletId        String
+  wallet          Wallet          @relation(fields: [walletId], references: [id], onDelete: Cascade)
+  amount          Float
+  type            String          // CREDIT, DEBIT, REFUND, ADJUSTMENT
+  balanceBefore   Float
+  balanceAfter    Float
+  referenceId     String?         // Colladome Order ID or Bank UTR
+  description     String
+  adminUserId     String?
+  metadata        String?         // JSON string
+  createdAt       DateTime        @default(now())
+}
+
+model ApiCategory {
+  id              String          @id @default(uuid())
+  name            String          @unique // Identity, Banking, GST, Telecom
+  slug            String          @unique
+  description     String?
+  icon            String?         // ShieldCheck, Building2, CreditCard, FileCheck
+  sortOrder       Int             @default(0)
+  apis            Api[]
+  createdAt       DateTime        @default(now())
+}
+
+model Api {
+  id               String          @id @default(uuid())
+  categoryId       String
+  category         ApiCategory     @relation(fields: [categoryId], references: [id])
+  name             String          // "PAN Detailed Verification"
+  slug             String          @unique
+  endpointPath     String          @unique // "/v1/verification/pan"
+  httpMethod       String          @default("POST")
+  description      String
+  useCase          String?
+  status           String          @default("ACTIVE") // ACTIVE, MAINTENANCE, DEPRECATED
+  defaultCostPrice Float           // e.g. 1.80 (Paid to provider)
+  defaultSellPrice Float           // e.g. 2.50 (Selling price to client)
+  requestSchema    String          @default("{}") // JSON schema for parameters & body
+  responseSchema   String          @default("{}") // JSON schema for sanitized Colladome response
+  providerMappings ApiProviderMapping[]
+  clientPricings   ClientPricing[]
+  apiLogs          ApiLog[]
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+}
+
+model Provider {
+  id               String          @id @default(uuid())
+  name             String          @unique // "Zoop", "IDFY", "Decentro", "Surpass"
+  code             String          @unique
+  baseUrl          String
+  authType         String          @default("HEADER_API_KEY") // HEADER_API_KEY, BEARER_TOKEN
+  credentialsEnc   String          // AES-256 encrypted credentials
+  isActive         Boolean         @default(true)
+  mappings         ApiProviderMapping[]
+  createdAt        DateTime        @default(now())
+}
+
+model ApiProviderMapping {
+  id               String          @id @default(uuid())
+  apiId            String
+  api              Api             @relation(fields: [apiId], references: [id], onDelete: Cascade)
+  providerId       String
+  provider         Provider        @relation(fields: [providerId], references: [id])
+  providerEndpoint String
+  providerMethod   String          @default("POST")
+  priority         Int             @default(1) // 1 = Primary, 2 = Secondary Failover
+  requestTransform String?         // JSON mapping rules
+  responseExtract  String?         // JSON extraction rules
+  isActive         Boolean         @default(true)
+  createdAt        DateTime        @default(now())
+}
+
+model ClientPricing {
+  id               String          @id @default(uuid())
+  userId           String
+  user             User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  apiId            String
+  api              Api             @relation(fields: [apiId], references: [id], onDelete: Cascade)
+  customPrice      Float           // Custom price per hit
+  isEnabled        Boolean         @default(true)
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+
+  @@unique([userId, apiId])
+}
+
+model ApiKey {
+  id               String          @id @default(uuid())
+  userId           String
+  user             User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  keyPrefix        String          // "cd_live_" or "cd_test_"
+  keyHash          String          @unique
+  keyHint          String          // "...4b9f"
+  type             String          @default("PRODUCTION") // PRODUCTION, SANDBOX
+  name             String          @default("Default Key")
+  rateLimitRpm     Int             @default(120)
+  isActive         Boolean         @default(true)
+  lastUsedAt       DateTime?
+  createdAt        DateTime        @default(now())
+}
+
+model ApiLog {
+  id               String          @id @default(uuid())
+  colladomeOrderId String          @unique
+  clientOrderId    String?
+  userId           String
+  user             User            @relation(fields: [userId], references: [id])
+  apiId            String
+  api              Api             @relation(fields: [apiId], references: [id])
+  providerId       String?
+  providerOrderId  String?         // Strictly internal (Zoop/IDFY order ID)
+  ipAddress        String
+  endpointPath     String
+  httpMethod       String
+  requestHeaders   String?         // JSON
+  requestBody      String?         // JSON
+  responseStatus   Int
+  responseBody     String?         // JSON
+  status           String          @default("SUCCESS") // SUCCESS, FAILED, TIMEOUT, PROVIDER_ERROR
+  latencyMs        Int
+  costPrice        Float           @default(0.0)
+  sellPrice        Float           @default(0.0)
+  marginProfit     Float           @default(0.0)
+  createdAt        DateTime        @default(now())
+
+  panReport        PanReport?
+  bankReport       BankReport?
+
+  @@index([userId, createdAt])
+  @@index([apiId, createdAt])
+}
+
+model PanReport {
+  id               String          @id @default(uuid())
+  apiLogId         String          @unique
+  apiLog           ApiLog          @relation(fields: [apiLogId], references: [id], onDelete: Cascade)
+  userId           String
+  user             User            @relation(fields: [userId], references: [id])
+  panNumber        String
+  fullName         String?
+  category         String?
+  status           String?         // VALID, INVALID
+  panAadhaarLinked Boolean?
+  createdAt        DateTime        @default(now())
+
+  @@index([userId, panNumber])
+  @@index([createdAt])
+}
+
+model BankReport {
+  id               String          @id @default(uuid())
+  apiLogId         String          @unique
+  apiLog           ApiLog          @relation(fields: [apiLogId], references: [id], onDelete: Cascade)
+  userId           String
+  user             User            @relation(fields: [userId], references: [id])
+  accountNumber    String
+  ifscCode         String
+  beneficiaryName  String?
+  nameAtBank       String?
+  matchPercentage  Float?
+  utrNumber        String?
+  status           String?         // VERIFIED, FAILED, INVALID_IFSC
+  createdAt        DateTime        @default(now())
+
+  @@index([userId, accountNumber])
+  @@index([createdAt])
+}
