@@ -13,10 +13,14 @@ import {
   Minus,
 } from "lucide-react";
 
+import WalletAdjustmentModal, { ClientWalletSummary } from "@/components/admin/WalletAdjustmentModal";
+
 export default function AdminWalletPage() {
   const [clients, setClients] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
+  const [modalOpen, setModalOpen] = useState(false);
+  const [selectedClientForModal, setSelectedClientForModal] = useState<ClientWalletSummary | null>(null);
 
   const fetchClients = () => {
     setLoading(true);
@@ -45,6 +49,24 @@ export default function AdminWalletPage() {
       (c.clientCode && c.clientCode.toLowerCase().includes(search.toLowerCase()))
   );
 
+  const handleOpenAdjustModal = (client?: any) => {
+    if (client) {
+      setSelectedClientForModal({
+        id: client.id,
+        clientCode: client.clientCode || "CD-0000",
+        companyName: client.companyName || "Unnamed Company",
+        email: client.email,
+        phone: client.phone,
+        walletBalance: client.walletBalance || 0,
+        billingModel: client.billingModel,
+        accountStatus: client.accountStatus,
+      });
+    } else {
+      setSelectedClientForModal(null);
+    }
+    setModalOpen(true);
+  };
+
   return (
     <div className="p-6 lg:p-8 space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-4">
@@ -55,13 +77,23 @@ export default function AdminWalletPage() {
           </p>
         </div>
 
-        <button
-          onClick={fetchClients}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold shadow-sm transition"
-        >
-          <RefreshCw className={`w-3.5 h-3.5 ${loading ? "animate-spin" : ""}`} />
-          <span>Refresh</span>
-        </button>
+        <div className="flex items-center gap-2.5">
+          <button
+            onClick={() => handleOpenAdjustModal()}
+            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-slate-950 hover:bg-slate-800 text-white text-xs font-bold shadow-sm transition active:scale-95"
+          >
+            <Wallet className="w-3.5 h-3.5" />
+            <span>Adjust Client Wallet (Credit / Debit)</span>
+          </button>
+
+          <button
+            onClick={fetchClients}
+            className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold shadow-sm transition"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${loading ? "animate-spin" : ""}`} />
+            <span>Refresh</span>
+          </button>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -140,13 +172,23 @@ export default function AdminWalletPage() {
                     </span>
                   </td>
                   <td className="p-3 text-right">
-                    <Link
-                      href={`/admin/clients/${c.id}`}
-                      className="inline-flex items-center gap-1 px-3 py-1 rounded bg-blue-50 text-blue-600 hover:bg-blue-600 hover:text-white font-semibold transition"
-                    >
-                      <span>Adjust / Passbook</span>
-                      <ArrowRight className="w-3 h-3" />
-                    </Link>
+                    <div className="inline-flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => handleOpenAdjustModal(c)}
+                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-950 text-white hover:bg-slate-800 text-[11px] font-semibold transition"
+                      >
+                        <Wallet className="w-3 h-3" />
+                        <span>Adjust</span>
+                      </button>
+                      <Link
+                        href={`/admin/clients/${c.id}`}
+                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-[11px] font-semibold transition"
+                      >
+                        <span>Passbook</span>
+                        <ArrowRight className="w-3 h-3" />
+                      </Link>
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -154,6 +196,14 @@ export default function AdminWalletPage() {
           </table>
         </div>
       </div>
+
+      {/* Wallet Adjustment Modal */}
+      <WalletAdjustmentModal
+        isOpen={modalOpen}
+        onClose={() => setModalOpen(false)}
+        onSuccess={fetchClients}
+        initialClient={selectedClientForModal}
+      />
     </div>
   );
 }

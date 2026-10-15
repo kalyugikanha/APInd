@@ -25,7 +25,10 @@ import {
   Clock,
   Ban,
   Save,
+  Wallet,
+  Minus,
 } from "lucide-react";
+import WalletAdjustmentModal from "@/components/admin/WalletAdjustmentModal";
 
 export default function Client360HubPage() {
   const params = useParams();
@@ -551,12 +554,15 @@ export default function Client360HubPage() {
           <div className="bg-white rounded-xl border border-slate-200/80 shadow-sm overflow-hidden">
             <div className="p-4 border-b border-slate-100 flex items-center justify-between">
               <h3 className="font-bold text-sm text-slate-900">Wallet Passbook & Transaction Ledger</h3>
-              <button
-                onClick={() => setShowWalletModal(true)}
-                className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-semibold transition"
-              >
-                + Manual Credit / Debit
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setShowWalletModal(true)}
+                  className="px-3.5 py-1.5 bg-slate-950 hover:bg-slate-800 text-white rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-sm"
+                >
+                  <Wallet className="w-3.5 h-3.5" />
+                  <span>Adjust Wallet (Credit / Debit)</span>
+                </button>
+              </div>
             </div>
 
             <div className="overflow-x-auto">
@@ -742,96 +748,27 @@ export default function Client360HubPage() {
       )}
 
       {/* Manual Credit / Debit Adjustment Modal */}
-      {showWalletModal && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-xl relative">
-            <button
-              onClick={() => setShowWalletModal(false)}
-              className="absolute right-4 top-4 text-slate-400 hover:text-slate-600"
-            >
-              ✕
-            </button>
-            <h3 className="text-lg font-bold text-slate-900">Manual Wallet Adjustment</h3>
-            <p className="text-xs text-slate-500 mt-1 mb-4">
-              Credit or debit funds to <strong>{client.companyName}</strong> with mandatory ledger audit trail.
-            </p>
-
-            <form onSubmit={handleWalletAdjust} className="space-y-4">
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">Adjustment Type *</label>
-                <div className="grid grid-cols-2 gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setWalletForm({ ...walletForm, type: "CREDIT" })}
-                    className={`py-2 text-xs font-bold rounded-lg border transition ${
-                      walletForm.type === "CREDIT"
-                        ? "bg-emerald-50 border-emerald-500 text-emerald-700"
-                        : "border-slate-200 text-slate-600"
-                    }`}
-                  >
-                    + CREDIT (Add Funds)
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setWalletForm({ ...walletForm, type: "DEBIT" })}
-                    className={`py-2 text-xs font-bold rounded-lg border transition ${
-                      walletForm.type === "DEBIT"
-                        ? "bg-rose-50 border-rose-500 text-rose-700"
-                        : "border-slate-200 text-slate-600"
-                    }`}
-                  >
-                    - DEBIT (Deduct Funds)
-                  </button>
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">Amount (₹) *</label>
-                <input
-                  type="number"
-                  step="0.01"
-                  required
-                  placeholder="e.g. 25000"
-                  value={walletForm.amount}
-                  onChange={(e) => setWalletForm({ ...walletForm, amount: e.target.value })}
-                  className="w-full text-xs border border-slate-300 rounded-lg p-2.5 font-bold focus:outline-none focus:border-blue-500"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  Bank Reference / NEFT UTR / Order ID
-                </label>
-                <input
-                  type="text"
-                  placeholder="e.g. NEFT_HDFC_99182374"
-                  value={walletForm.referenceId}
-                  onChange={(e) => setWalletForm({ ...walletForm, referenceId: e.target.value })}
-                  className="w-full text-xs font-mono border border-slate-300 rounded-lg p-2.5 focus:outline-none focus:border-blue-500"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">Description / Reason *</label>
-                <textarea
-                  rows={2}
-                  required
-                  value={walletForm.description}
-                  onChange={(e) => setWalletForm({ ...walletForm, description: e.target.value })}
-                  className="w-full text-xs border border-slate-300 rounded-lg p-2.5 focus:outline-none focus:border-blue-500"
-                ></textarea>
-              </div>
-
-              <button
-                type="submit"
-                className="w-full py-2.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs transition"
-              >
-                Submit Wallet Adjustment
-              </button>
-            </form>
-          </div>
-        </div>
-      )}
+      <WalletAdjustmentModal
+        isOpen={showWalletModal}
+        onClose={() => setShowWalletModal(false)}
+        onSuccess={() => {
+          fetchClientDetails();
+        }}
+        initialClient={
+          client
+            ? {
+                id: client.id,
+                clientCode: client.clientCode || "CD-0000",
+                companyName: client.companyName || "Unnamed Client",
+                email: client.email,
+                phone: client.phone,
+                walletBalance: client.wallet?.balance || 0,
+                billingModel: client.billingModel,
+                accountStatus: client.accountStatus,
+              }
+            : null
+        }
+      />
 
       {/* New Key Generator Modal */}
       {showKeyModal && (
