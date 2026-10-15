@@ -19,6 +19,7 @@ import {
   Lock,
   Sliders,
   Radio,
+  Activity,
 } from "lucide-react";
 
 export default function AdminApisPage() {
@@ -27,6 +28,57 @@ export default function AdminApisPage() {
   const [providers, setProviders] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<"catalog" | "create" | "providers">("catalog");
+
+  // Ping State
+  const [pingResults, setPingResults] = useState<
+    Record<
+      string,
+      {
+        loading?: boolean;
+        reachable?: boolean;
+        status?: number;
+        latencyMs?: number;
+        message?: string;
+        error?: string;
+      }
+    >
+  >({});
+
+  const handlePingProvider = async (providerId: string) => {
+    setPingResults((prev) => ({
+      ...prev,
+      [providerId]: { loading: true },
+    }));
+
+    try {
+      const res = await fetch("/api/internal/admin/providers/ping", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ providerId }),
+      });
+      const data = await res.json();
+      setPingResults((prev) => ({
+        ...prev,
+        [providerId]: {
+          loading: false,
+          reachable: data.reachable,
+          status: data.status,
+          latencyMs: data.latencyMs,
+          message: data.message,
+          error: data.error,
+        },
+      }));
+    } catch (err: any) {
+      setPingResults((prev) => ({
+        ...prev,
+        [providerId]: {
+          loading: false,
+          reachable: false,
+          error: err.message || "Failed to ping",
+        },
+      }));
+    }
+  };
 
   // Add API Form State
   const [form, setForm] = useState({
@@ -524,20 +576,62 @@ export default function AdminApisPage() {
                     <Lock className="w-3.5 h-3.5 text-neutral-400 shrink-0" />
                     <span>Encrypted with AES-256-GCM. Unencrypted keys are never logged.</span>
                   </div>
+
+                  {/* Ping Result Alert */}
+                  {pingResults[p.id] && !pingResults[p.id]?.loading && (
+                    <div
+                      className={`p-2.5 rounded-lg text-[11px] font-mono flex items-center justify-between border ${
+                        pingResults[p.id]?.reachable
+                          ? "bg-emerald-50 text-emerald-800 border-emerald-200"
+                          : "bg-rose-50 text-rose-800 border-rose-200"
+                      }`}
+                    >
+                      <div className="flex items-center gap-1.5 truncate">
+                        <span
+                          className={`w-2 h-2 rounded-full shrink-0 ${
+                            pingResults[p.id]?.reachable ? "bg-emerald-500 animate-pulse" : "bg-rose-500"
+                          }`}
+                        ></span>
+                        <span className="font-bold">HTTP {pingResults[p.id]?.status || "ERR"}:</span>
+                        <span className="truncate">
+                          {pingResults[p.id]?.reachable ? "Reachable" : pingResults[p.id]?.error || "Unreachable"}
+                        </span>
+                      </div>
+                      {pingResults[p.id]?.latencyMs !== undefined && (
+                        <span className="shrink-0 font-bold ml-2">{pingResults[p.id]?.latencyMs}ms</span>
+                      )}
+                    </div>
+                  )}
                 </div>
 
-                <div className="pt-3 border-t border-neutral-100 flex items-center justify-between">
+                <div className="pt-3 border-t border-neutral-100 flex flex-wrap items-center justify-between gap-2">
                   <div className="text-[11px] text-neutral-400">
                     Active Status: <span className="font-semibold text-neutral-700">{p.isActive ? "Online" : "Paused"}</span>
                   </div>
 
-                  <button
-                    onClick={() => handleOpenProviderModal(p)}
-                    className="px-3 py-1.5 rounded-lg bg-black hover:bg-neutral-800 text-white font-semibold text-xs transition flex items-center gap-1.5 shadow-sm"
-                  >
-                    <Sliders className="w-3.5 h-3.5" />
-                    <span>Configure Credentials & Mode</span>
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => handlePingProvider(p.id)}
+                      disabled={pingResults[p.id]?.loading}
+                      className="px-3 py-1.5 rounded-lg border border-neutral-200 hover:border-neutral-300 bg-white text-neutral-800 font-semibold text-xs transition flex items-center gap-1.5 shadow-xs disabled:opacity-50"
+                      title="Test Live Upstream Ping"
+                    >
+                      <Activity
+                        className={`w-3.5 h-3.5 ${
+                          pingResults[p.id]?.loading ? "animate-spin text-neutral-400" : "text-emerald-600"
+                        }`}
+                      />
+                      <span>{pingResults[p.id]?.loading ? "Pinging..." : "Test Connection"}</span>
+                    </button>
+
+                    <button
+                      onClick={() => handleOpenProviderModal(p)}
+                      className="px-3 py-1.5 rounded-lg bg-black hover:bg-neutral-800 text-white font-semibold text-xs transition flex items-center gap-1.5 shadow-sm"
+                    >
+                      <Sliders className="w-3.5 h-3.5" />
+                      <span>Configure</span>
+                    </button>
+                  </div>
                 </div>
               </div>
             ))}
@@ -702,22 +796,75 @@ export default function AdminApisPage() {
               </div>
 
               {/* Modal Actions */}
-              <div className="flex items-center justify-end gap-2 pt-4 border-t border-neutral-150">
-                <button
-                  type="button"
-                  onClick={() => setProviderModalOpen(false)}
-                  className="px-4 py-2 rounded-lg text-xs font-semibold border border-neutral-200 text-neutral-700 hover:bg-neutral-50 transition"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={savingProvider}
-                  className="px-5 py-2 rounded-lg text-xs font-semibold bg-black hover:bg-neutral-800 text-white transition shadow-sm disabled:opacity-50"
-                >
-                  {savingProvider ? "Encrypting & Saving..." : "Save Provider Configuration"}
-                </button>
+              <div className="flex flex-wrap items-center justify-between gap-3 pt-4 border-t border-neutral-150">
+                <div>
+                  <button
+                    type="button"
+                    onClick={() => handlePingProvider(selectedProvider.id)}
+                    disabled={pingResults[selectedProvider.id]?.loading}
+                    className="px-3 py-2 rounded-lg text-xs font-semibold border border-neutral-200 hover:border-neutral-300 text-neutral-800 bg-neutral-50 hover:bg-neutral-100 transition flex items-center gap-1.5"
+                  >
+                    <Activity
+                      className={`w-3.5 h-3.5 ${
+                        pingResults[selectedProvider.id]?.loading
+                          ? "animate-spin text-neutral-400"
+                          : "text-emerald-600"
+                      }`}
+                    />
+                    <span>
+                      {pingResults[selectedProvider.id]?.loading ? "Testing..." : "Test Connection"}
+                    </span>
+                  </button>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setProviderModalOpen(false)}
+                    className="px-4 py-2 rounded-lg text-xs font-semibold border border-neutral-200 text-neutral-700 hover:bg-neutral-50 transition"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={savingProvider}
+                    className="px-5 py-2 rounded-lg text-xs font-semibold bg-black hover:bg-neutral-800 text-white transition shadow-sm disabled:opacity-50"
+                  >
+                    {savingProvider ? "Encrypting & Saving..." : "Save Provider Configuration"}
+                  </button>
+                </div>
               </div>
+
+              {/* In-modal ping alert */}
+              {pingResults[selectedProvider.id] && !pingResults[selectedProvider.id]?.loading && (
+                <div
+                  className={`p-3 rounded-xl text-xs font-mono border ${
+                    pingResults[selectedProvider.id]?.reachable
+                      ? "bg-emerald-50 text-emerald-900 border-emerald-200"
+                      : "bg-rose-50 text-rose-900 border-rose-200"
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold flex items-center gap-1.5">
+                      <span
+                        className={`w-2 h-2 rounded-full ${
+                          pingResults[selectedProvider.id]?.reachable
+                            ? "bg-emerald-500 animate-pulse"
+                            : "bg-rose-500"
+                        }`}
+                      ></span>
+                      HTTP {pingResults[selectedProvider.id]?.status || "ERR"}:{" "}
+                      {pingResults[selectedProvider.id]?.reachable ? "Connection Succeeded" : "Connection Failed"}
+                    </span>
+                    {pingResults[selectedProvider.id]?.latencyMs !== undefined && (
+                      <span className="font-bold">{pingResults[selectedProvider.id]?.latencyMs}ms</span>
+                    )}
+                  </div>
+                  <p className="text-[11px] mt-1 text-neutral-600 font-sans">
+                    {pingResults[selectedProvider.id]?.message || pingResults[selectedProvider.id]?.error}
+                  </p>
+                </div>
+              )}
             </form>
           </div>
         </div>

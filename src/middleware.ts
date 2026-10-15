@@ -82,6 +82,11 @@ export async function middleware(req: NextRequest) {
   const token = req.cookies.get("colladome_session")?.value;
   const session = token ? await verifySessionTokenEdge(token) : null;
 
+  // 0. Clean API Gateway Subdomain Route Rewrite (/v1/* -> /api/v1/*)
+  if (pathname.startsWith("/v1/")) {
+    return NextResponse.rewrite(new URL(`/api${pathname}`, req.url));
+  }
+
   // 1. Protect Admin Portal (/admin/*)
   if (pathname.startsWith("/admin")) {
     if (!session) {
@@ -126,6 +131,7 @@ export async function middleware(req: NextRequest) {
 
 export const config = {
   matcher: [
+    "/v1/:path*",
     "/admin/:path*",
     "/dashboard/:path*",
     "/login",

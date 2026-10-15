@@ -185,11 +185,15 @@ export async function handleGatewayRequest(
         } else {
           // Simulated mock response when in simulation/staging mode
           if (endpointPath.includes("/pan")) {
-            upstreamRes = generateMockPanResponse(body.pan_number);
-          } else if (endpointPath.includes("/bank-verify")) {
-            upstreamRes = generateMockBankResponse(body.account_number, body.ifsc_code, body.beneficiary_name);
-          } else if (endpointPath.includes("/gstin-verify")) {
-            upstreamRes = generateMockGstinResponse(body.gstin);
+            upstreamRes = generateMockPanResponse(body.pan_number || body.pan);
+          } else if (endpointPath.includes("/bank-verify") || endpointPath.includes("/bank")) {
+            upstreamRes = generateMockBankResponse(
+              body.account_number || body.accountNumber || body.account,
+              body.ifsc_code || body.ifsc,
+              body.beneficiary_name || body.beneficiaryName || body.name
+            );
+          } else if (endpointPath.includes("/gstin-verify") || endpointPath.includes("/gstin")) {
+            upstreamRes = generateMockGstinResponse(body.gstin || body.gstNumber || body.gst);
           } else {
             upstreamRes = { status: "SUCCESS", data: { verified: true, message: "Sandbox simulation passed" } };
           }

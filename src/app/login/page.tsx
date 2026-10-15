@@ -68,33 +68,25 @@ export default function LoginPage() {
       } finally {
         setLoading(false);
       }
-    } else {
-      // Sign up flow: provision trial sandbox
+      // Sign up flow: call clean signup endpoint with user's actual password
       try {
-        const res = await fetch("/api/internal/sandbox/create-key", {
+        const res = await fetch("/api/internal/auth/signup", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             email,
-            companyName: companyName || "My Organization",
-            contactPerson: contactPerson || "Admin User",
-            phone: "+91 98765 43210",
+            password,
+            companyName: companyName || undefined,
+            contactPerson: contactPerson || undefined,
           }),
         });
         const data = await res.json();
         if (res.ok) {
-          setSuccessMsg("Account created! Logging you into your sandbox dashboard...");
-          // Log into session
-          const loginRes = await fetch("/api/internal/auth/login", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ email, password: password || "Colladome@123" }),
-          });
-          const loginData = await loginRes.json();
+          setSuccessMsg(data.message || "Account created! Redirecting to your dashboard...");
           setTimeout(() => {
-            router.push(loginData.redirectUrl || "/dashboard");
+            router.push(data.redirectUrl || "/dashboard");
             router.refresh();
-          }, 600);
+          }, 500);
         } else {
           setErrorMsg(data.error || "Failed to create account");
         }
