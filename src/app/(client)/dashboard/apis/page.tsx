@@ -20,13 +20,10 @@ import {
 export default function ClientApiHousePage() {
   const [apis, setApis] = useState<any[]>([]);
   const [selectedApi, setSelectedApi] = useState<any>(null);
+  const [clientProfile, setClientProfile] = useState<any>(null);
 
-  // Key presets
-  const LIVE_KEY = "cd_live_acme_prod_secret_88319a2b";
-  const TEST_KEY = "cd_test_acme_sand_secret_11928c3d";
-
-  const [selectedKeyPreset, setSelectedKeyPreset] = useState<string>("live");
-  const [apiKey, setApiKey] = useState<string>(LIVE_KEY);
+  const [selectedKeyPreset, setSelectedKeyPreset] = useState<string>("custom");
+  const [apiKey, setApiKey] = useState<string>("");
   const [testBody, setTestBody] = useState("");
   const [loading, setLoading] = useState(false);
   const [copiedResponse, setCopiedResponse] = useState(false);
@@ -39,18 +36,35 @@ export default function ClientApiHousePage() {
   } | null>(null);
 
   useEffect(() => {
-    fetch("/api/internal/admin/apis")
-      .then((res) => res.json())
-      .then((data) => {
-        if (data.apis) {
-          setApis(data.apis);
-          if (data.apis.length > 0) {
-            handleSelectApi(data.apis[0]);
+    Promise.all([
+      fetch("/api/internal/admin/apis").then((res) => res.json()),
+      fetch("/api/internal/client/me").then((res) => res.json()),
+    ])
+      .then(([apiData, clientData]) => {
+        if (apiData.apis) {
+          setApis(apiData.apis);
+          if (apiData.apis.length > 0) {
+            handleSelectApi(apiData.apis[0]);
+          }
+        }
+        if (clientData.client) {
+          setClientProfile(clientData.client);
+          const liveKey = clientData.client.apiKeys?.find((k: any) => k.type === "PRODUCTION" && k.isActive);
+          const sandKey = clientData.client.apiKeys?.find((k: any) => k.type === "SANDBOX" && k.isActive);
+          if (liveKey) {
+            setSelectedKeyPreset("live");
+            setApiKey(`${liveKey.keyPrefix}${liveKey.keyHint}`);
+          } else if (sandKey) {
+            setSelectedKeyPreset("test");
+            setApiKey(`${sandKey.keyPrefix}${sandKey.keyHint}`);
           }
         }
       })
       .catch((err) => console.error(err));
   }, []);
+
+  const liveKey = clientProfile?.apiKeys?.find((k: any) => k.type === "PRODUCTION" && k.isActive);
+  const sandKey = clientProfile?.apiKeys?.find((k: any) => k.type === "SANDBOX" && k.isActive);
 
   const handleSelectApi = (api: any) => {
     setSelectedApi(api);
@@ -70,9 +84,9 @@ export default function ClientApiHousePage() {
   const handleKeyPresetChange = (preset: string) => {
     setSelectedKeyPreset(preset);
     if (preset === "live") {
-      setApiKey(LIVE_KEY);
+      setApiKey(liveKey ? `${liveKey.keyPrefix}${liveKey.keyHint}` : "");
     } else if (preset === "test") {
-      setApiKey(TEST_KEY);
+      setApiKey(sandKey ? `${sandKey.keyPrefix}${sandKey.keyHint}` : "");
     } else {
       setApiKey("");
     }
@@ -256,7 +270,7 @@ export default function ClientApiHousePage() {
                         {selectedKeyPreset === "live" && <Check className="w-3.5 h-3.5" />}
                       </div>
                       <div className={`text-[10px] mt-0.5 font-mono truncate ${selectedKeyPreset === "live" ? "text-neutral-300" : "text-neutral-400"}`}>
-                        cd_live_...88319a2b
+                        {liveKey ? `${liveKey.keyPrefix}${liveKey.keyHint}` : "Not Created"}
                       </div>
                     </button>
 
@@ -274,7 +288,7 @@ export default function ClientApiHousePage() {
                         {selectedKeyPreset === "test" && <Check className="w-3.5 h-3.5" />}
                       </div>
                       <div className={`text-[10px] mt-0.5 font-mono truncate ${selectedKeyPreset === "test" ? "text-neutral-300" : "text-neutral-400"}`}>
-                        cd_test_...11928c3d
+                        {sandKey ? `${sandKey.keyPrefix}${sandKey.keyHint}` : "Not Created"}
                       </div>
                     </button>
 
@@ -324,7 +338,7 @@ export default function ClientApiHousePage() {
 
                 <button
                   onClick={handleExecuteCall}
-                  disabled={loading}
+                  disabled={loading || !apiKey.trim()}
                   className="px-6 py-2.5 bg-black hover:bg-neutral-800 text-white rounded-lg text-xs font-semibold shadow-sm transition disabled:opacity-50 flex items-center gap-2"
                 >
                   <Zap className="w-3.5 h-3.5" />

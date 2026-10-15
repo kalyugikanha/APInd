@@ -1,17 +1,27 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
+import { verifySessionToken, SESSION_COOKIE_NAME } from "@/lib/session";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
-    const userId = searchParams.get("userId") || undefined;
+    const userIdParam = searchParams.get("userId") || undefined;
     const account = searchParams.get("account") || undefined;
     const ifsc = searchParams.get("ifsc") || undefined;
 
+    let effectiveUserId = userIdParam;
+    const token = req.cookies.get(SESSION_COOKIE_NAME)?.value;
+    if (token) {
+      const payload = verifySessionToken(token);
+      if (payload && payload.role !== "SUPER_ADMIN") {
+        effectiveUserId = payload.userId;
+      }
+    }
+
     const where: any = {};
-    if (userId) where.userId = userId;
+    if (effectiveUserId) where.userId = effectiveUserId;
     if (account) where.accountNumber = { contains: account };
     if (ifsc) where.ifscCode = { contains: ifsc.toUpperCase() };
 

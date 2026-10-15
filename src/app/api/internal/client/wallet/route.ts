@@ -1,14 +1,37 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
+import { verifySessionToken, SESSION_COOKIE_NAME } from "@/lib/session";
+
+export const dynamic = "force-dynamic";
+
+function resolveTargetUser(req: NextRequest, explicitClientId?: string | null) {
+  const token = req.cookies.get(SESSION_COOKIE_NAME)?.value;
+  if (token) {
+    const payload = verifySessionToken(token);
+    if (payload) {
+      if (payload.role === "SUPER_ADMIN" && explicitClientId) {
+        return explicitClientId;
+      }
+      return payload.userId;
+    }
+  }
+  return explicitClientId || null;
+}
 
 export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
-    const clientId = searchParams.get("clientId");
+    const clientIdParam = searchParams.get("clientId");
+    const userId = resolveTargetUser(req, clientIdParam);
 
-    const user = clientId
-      ? await db.user.findUnique({ where: { id: clientId }, include: { wallet: true } })
-      : await db.user.findFirst({ where: { email: "fintech@acme.com" }, include: { wallet: true } });
+    if (!userId) {
+      return NextResponse.json({ error: "Unauthorized: Active session required" }, { status: 401 });
+    }
+
+    const user = await db.user.findUnique({
+      where: { id: userId },
+      include: { wallet: true },
+    });
 
     if (!user || !user.wallet) {
       return NextResponse.json({ error: "Wallet not found" }, { status: 404 });
@@ -21,8 +44,8 @@ export async function GET(req: NextRequest) {
     });
 
     return NextResponse.json({
-      balance: user.wallet.balance,
-      currency: user.wallet.currency,
+      balance: user.wallet.balance ?? 0,
+      currency: user.wallet.currency || "INR",
       transactions,
     });
   } catch (err: any) {
@@ -41,16 +64,22 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Please enter a valid amount." }, { status: 400 });
     }
 
-    const user = clientId
-      ? await db.user.findUnique({ where: { id: clientId }, include: { wallet: true } })
-      : await db.user.findFirst({ where: { email: "fintech@acme.com" }, include: { wallet: true } });
+    const userId = resolveTargetUser(req, clientId);
+    if (!userId) {
+      return NextResponse.json({ error: "Unauthorized: Active session required" }, { status: 401 });
+    }
+
+    const user = await db.user.findUnique({
+      where: { id: userId },
+      include: { wallet: true },
+    });
 
     if (!user || !user.wallet) {
       return NextResponse.json({ error: "Wallet not found" }, { status: 404 });
     }
 
     const ref = `PG_PAY_${Date.now()}`;
-    const balanceBefore = user.wallet.balance;
+    const balanceBefore = user.wallet.balance ?? 0;
     const balanceAfter = Number((balanceBefore + numAmount).toFixed(2));
 
     await db.$transaction([

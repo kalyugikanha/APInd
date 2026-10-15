@@ -78,7 +78,7 @@ export default function ClientDashboardLayout({ children }: { children: React.Re
           </Link>
           <span className="text-slate-300">|</span>
           <span className="text-xs text-slate-500 font-mono hidden sm:inline">
-            {profile?.companyName || "Acme Fintech Solutions"} ({profile?.clientCode || "CD-1001"})
+            {profile?.companyName || "Client Workspace"} {profile?.clientCode ? `(${profile.clientCode})` : ""}
           </span>
         </div>
 
@@ -88,14 +88,14 @@ export default function ClientDashboardLayout({ children }: { children: React.Re
           <div className="bg-slate-100 border border-slate-200/80 px-3 py-1 rounded-full flex items-center gap-1.5 text-xs">
             <span className="text-slate-500 font-medium">Balance:</span>
             <strong className="text-slate-900 font-bold font-mono">
-              ₹{profile?.wallet?.balance?.toFixed(2) || "45,200.00"}
+              ₹{(profile?.wallet?.balance ?? 0).toFixed(2)}
             </strong>
           </div>
 
           {/* Notification Bell */}
           <div className="relative cursor-pointer text-slate-500 hover:text-slate-800 transition">
             <Bell className="w-4 h-4" />
-            <span className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-blue-600 text-white font-bold text-[9px] flex items-center justify-center">
+            <span className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-black text-white font-bold text-[9px] flex items-center justify-center">
               1
             </span>
           </div>
@@ -107,10 +107,10 @@ export default function ClientDashboardLayout({ children }: { children: React.Re
               className="flex items-center gap-2.5 cursor-pointer select-none p-1 rounded-lg hover:bg-slate-100 transition"
             >
               <div className="w-7 h-7 rounded-full bg-slate-800 text-white font-bold text-xs flex items-center justify-center">
-                {profile?.fullName ? profile.fullName[0] : "A"}
+                {profile?.fullName ? profile.fullName[0].toUpperCase() : "U"}
               </div>
               <span className="text-xs font-bold text-slate-800 hidden sm:inline">
-                {profile?.companyName || "Acme Fintech"}
+                {profile?.companyName || profile?.fullName || "Client Workspace"}
               </span>
               <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
             </div>

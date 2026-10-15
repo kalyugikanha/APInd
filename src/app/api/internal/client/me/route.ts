@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
+import { verifySessionToken, SESSION_COOKIE_NAME } from "@/lib/session";
 
 export const dynamic = "force-dynamic";
 
@@ -8,29 +9,39 @@ export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url);
     const clientIdParam = searchParams.get("clientId");
 
-    // In production, clientId comes from auth session/cookie. Default to Acme Fintech for preview/demo
-    let user = null;
-    if (clientIdParam) {
-      user = await db.user.findUnique({
-        where: { id: clientIdParam },
-        include: {
-          wallet: true,
-          apiKeys: { orderBy: { createdAt: "desc" } },
-          clientSettings: true,
-          _count: { select: { apiLogs: true, panReports: true, bankReports: true } },
-        },
-      });
-    } else {
-      user = await db.user.findFirst({
-        where: { email: "fintech@acme.com" },
-        include: {
-          wallet: true,
-          apiKeys: { orderBy: { createdAt: "desc" } },
-          clientSettings: true,
-          _count: { select: { apiLogs: true, panReports: true, bankReports: true } },
-        },
-      });
+    // Resolve user ID from session cookie or query param (for Super Admin inspection)
+    let targetUserId: string | null = null;
+    const token = req.cookies.get(SESSION_COOKIE_NAME)?.value;
+
+    if (token) {
+      const payload = verifySessionToken(token);
+      if (payload) {
+        if (payload.role === "SUPER_ADMIN" && clientIdParam) {
+          targetUserId = clientIdParam;
+        } else {
+          targetUserId = payload.userId;
+        }
+      }
+    } else if (clientIdParam) {
+      targetUserId = clientIdParam;
     }
+
+    if (!targetUserId) {
+      return NextResponse.json(
+        { error: "Unauthorized: Active session required" },
+        { status: 401 }
+      );
+    }
+
+    const user = await db.user.findUnique({
+      where: { id: targetUserId },
+      include: {
+        wallet: true,
+        apiKeys: { orderBy: { createdAt: "desc" } },
+        clientSettings: true,
+        _count: { select: { apiLogs: true, panReports: true, bankReports: true } },
+      },
+    });
 
     if (!user) {
       return NextResponse.json({ error: "Client not found" }, { status: 404 });
@@ -44,10 +55,10 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({
       client: {
         id: user.id,
-        clientCode: user.clientCode,
+        clientCode: user.clientCode || "N/A",
         fullName: user.fullName,
         email: user.email,
-        companyName: user.companyName,
+        companyName: user.companyName || user.fullName,
         brandName: user.brandName,
         phone: user.phone,
         billingModel: user.billingModel,
@@ -55,7 +66,7 @@ export async function GET(req: NextRequest) {
         kycStatus: user.kycStatus,
         wallet: {
           id: user.wallet?.id,
-          balance: user.wallet?.balance || 0,
+          balance: user.wallet?.balance ?? 0,
           currency: user.wallet?.currency || "INR",
         },
         settings: {
@@ -65,9 +76,9 @@ export async function GET(req: NextRequest) {
         },
         apiKeys: user.apiKeys,
         stats: {
-          totalHits: user._count.apiLogs,
-          totalPanHits: user._count.panReports,
-          totalBankHits: user._count.bankReports,
+          totalHits: user._count.apiLogs ?? 0,
+          totalPanHits: user._count.panReports ?? 0,
+          totalBankHits: user._count.bankReports ?? 0,
         },
       },
     });

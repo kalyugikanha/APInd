@@ -281,7 +281,7 @@ export default function AdminDashboardPage() {
                       <td className="p-3 text-right" onClick={(e) => e.stopPropagation()}>
                         <Link
                           href="/admin/reports/logs"
-                          className="text-xs font-semibold text-blue-600 hover:underline"
+                          className="text-xs font-semibold text-neutral-900 hover:underline"
                         >
                           More Details
                         </Link>
@@ -291,8 +291,14 @@ export default function AdminDashboardPage() {
                 })
               ) : (
                 <tr>
-                  <td colSpan={8} className="p-8 text-center text-slate-400">
-                    No transactions found.
+                  <td colSpan={8} className="p-12 text-center">
+                    <div className="w-12 h-12 rounded-full bg-neutral-100 flex items-center justify-center mx-auto mb-3 text-neutral-400">
+                      <Activity className="w-6 h-6" />
+                    </div>
+                    <div className="font-bold text-neutral-900 text-sm">No live API hits recorded yet</div>
+                    <p className="text-xs text-neutral-500 max-w-sm mx-auto mt-1">
+                      Incoming verification requests to api.colladome.com will stream here in real time.
+                    </p>
                   </td>
                 </tr>
               )}
