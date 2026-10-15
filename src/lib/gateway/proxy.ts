@@ -150,47 +150,57 @@ export async function handleGatewayRequest(
           headers["Authorization"] = `Bearer ${creds.apiKey || "demo_token"}`;
         }
 
-        // Simulating actual upstream provider call with graceful fallback
-        const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), 4000);
+        const isMockSimulation =
+          creds.isSimulation === true ||
+          !creds.apiKey ||
+          creds.apiKey === "demo_key";
 
-        // In case provider endpoint is mock or live
         let upstreamRes: any = null;
-        try {
-          // If in test environment or mock url, generate simulated response
-          if (targetUrl.includes("zoop") || targetUrl.includes("idfy") || targetUrl.includes("decentro") || targetUrl.includes("surpass")) {
-            // Simulated live provider response
-            if (endpointPath.includes("/pan")) {
-              upstreamRes = generateMockPanResponse(body.pan_number);
-            } else if (endpointPath.includes("/bank-verify")) {
-              upstreamRes = generateMockBankResponse(body.account_number, body.ifsc_code, body.beneficiary_name);
-            } else if (endpointPath.includes("/gstin-verify")) {
-              upstreamRes = generateMockGstinResponse(body.gstin);
-            } else {
-              upstreamRes = { status: "SUCCESS", data: { verified: true } };
-            }
-          } else {
+
+        if (!isMockSimulation && provider.isActive) {
+          // Execute REAL external HTTP request to Upstream Provider (Zoop, IDFY, Decentro, Surpass)
+          const controller = new AbortController();
+          const timeout = setTimeout(() => controller.abort(), 6000);
+
+          try {
             const rawRes = await fetch(targetUrl, {
-              method: mapping.providerMethod,
+              method: mapping.providerMethod || "POST",
               headers,
               body: JSON.stringify(body),
               signal: controller.signal,
             });
             clearTimeout(timeout);
             upstreamRes = await rawRes.json();
+            providerOrderId =
+              upstreamRes?.order_id ||
+              upstreamRes?.transaction_id ||
+              upstreamRes?.data?.order_id ||
+              upstreamRes?.id ||
+              `${provider.code}_LIVE_${Date.now()}`;
+          } catch (fetchErr: any) {
+            clearTimeout(timeout);
+            console.warn(`Upstream provider ${provider.name} request failed or timed out:`, fetchErr.message);
+            continue; // Automatic failover to next provider mapping
           }
-        } catch (fetchErr) {
-          clearTimeout(timeout);
-          console.warn(`Provider ${provider.name} failed or timed out. Attempting fallback...`);
-          continue; // Try next fallback provider mapping
+        } else {
+          // Simulated mock response when in simulation/staging mode
+          if (endpointPath.includes("/pan")) {
+            upstreamRes = generateMockPanResponse(body.pan_number);
+          } else if (endpointPath.includes("/bank-verify")) {
+            upstreamRes = generateMockBankResponse(body.account_number, body.ifsc_code, body.beneficiary_name);
+          } else if (endpointPath.includes("/gstin-verify")) {
+            upstreamRes = generateMockGstinResponse(body.gstin);
+          } else {
+            upstreamRes = { status: "SUCCESS", data: { verified: true, message: "Sandbox simulation passed" } };
+          }
+          providerOrderId = `${provider.code}_MOCK_${Date.now()}`;
         }
 
         if (upstreamRes) {
           responseData = upstreamRes.data || upstreamRes;
           status = upstreamRes.status === "FAILED" ? "FAILED" : "SUCCESS";
-          providerOrderId = `${provider.code}_TXN_${Date.now()}`;
           providerSuccess = true;
-          break; // Primary or secondary provider succeeded!
+          break; // Provider succeeded!
         }
       } catch (err) {
         console.warn(`Mapping failed for provider ${mapping.provider.name}:`, err);

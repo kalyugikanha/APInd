@@ -13,6 +13,12 @@ import {
   CheckCircle2,
   RefreshCw,
   Cpu,
+  Key,
+  X,
+  Server,
+  Lock,
+  Sliders,
+  Radio,
 } from "lucide-react";
 
 export default function AdminApisPage() {
@@ -41,20 +47,37 @@ export default function AdminApisPage() {
     responseSchemaText: '{\n  "status": "VALID",\n  "full_name": "JOHN DOE"\n}',
   });
 
+  // Provider Edit Modal State
+  const [selectedProvider, setSelectedProvider] = useState<any | null>(null);
+  const [providerModalOpen, setProviderModalOpen] = useState(false);
+  const [savingProvider, setSavingProvider] = useState(false);
+  const [providerForm, setProviderForm] = useState({
+    id: "",
+    name: "",
+    baseUrl: "",
+    apiKey: "",
+    apiSecret: "",
+    authType: "HEADER_API_KEY",
+    isActive: true,
+    isSimulation: true,
+  });
+
   const fetchData = () => {
     setLoading(true);
-    fetch("/api/internal/admin/apis")
-      .then((res) => res.json())
-      .then((data) => {
-        setApis(data.apis || []);
-        setCategories(data.categories || []);
-        setProviders(data.providers || []);
-        if (data.categories?.length > 0 && !form.categoryId) {
+    Promise.all([
+      fetch("/api/internal/admin/apis").then((res) => res.json()),
+      fetch("/api/internal/admin/providers").then((res) => res.json()),
+    ])
+      .then(([apiData, provData]) => {
+        setApis(apiData.apis || []);
+        setCategories(apiData.categories || []);
+        setProviders(provData.providers || apiData.providers || []);
+        if (apiData.categories?.length > 0 && !form.categoryId) {
           setForm((prev) => ({
             ...prev,
-            categoryId: data.categories[0].id,
-            primaryProviderId: data.providers?.[0]?.id || "",
-            secondaryProviderId: data.providers?.[1]?.id || "",
+            categoryId: apiData.categories[0].id,
+            primaryProviderId: provData.providers?.[0]?.id || "",
+            secondaryProviderId: provData.providers?.[1]?.id || "",
           }));
         }
         setLoading(false);
@@ -63,6 +86,45 @@ export default function AdminApisPage() {
         console.error(err);
         setLoading(false);
       });
+  };
+
+  const handleOpenProviderModal = (p: any) => {
+    setSelectedProvider(p);
+    setProviderForm({
+      id: p.id,
+      name: p.name,
+      baseUrl: p.baseUrl || "",
+      apiKey: "",
+      apiSecret: "",
+      authType: p.authType || "HEADER_API_KEY",
+      isActive: p.isActive !== false,
+      isSimulation: p.isSimulation !== false,
+    });
+    setProviderModalOpen(true);
+  };
+
+  const handleSaveProvider = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSavingProvider(true);
+    try {
+      const res = await fetch("/api/internal/admin/providers", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(providerForm),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        alert(data.message || "Provider updated successfully!");
+        setProviderModalOpen(false);
+        fetchData();
+      } else {
+        alert(data.error || "Failed to update provider");
+      }
+    } catch (err: any) {
+      alert("Error: " + err.message);
+    } finally {
+      setSavingProvider(false);
+    }
   };
 
   useEffect(() => {
@@ -100,8 +162,8 @@ export default function AdminApisPage() {
       {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900 tracking-tight">API Studio & Upstream Routing</h1>
-          <p className="text-xs text-slate-500 mt-1">
+          <h1 className="text-2xl font-bold text-neutral-900 tracking-tight">API Studio & Upstream Routing</h1>
+          <p className="text-xs text-neutral-500 mt-1">
             Map 3rd-party provider endpoints (Zoop, IDFY, Decentro, Surpass) to Colladome Gateway with auto failover
           </p>
         </div>
@@ -109,16 +171,20 @@ export default function AdminApisPage() {
         <div className="flex items-center gap-2">
           <button
             onClick={() => setActiveTab("catalog")}
-            className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition ${
-              activeTab === "catalog" ? "bg-blue-600 text-white" : "bg-white border text-slate-700"
+            className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition ${
+              activeTab === "catalog"
+                ? "bg-black text-white shadow-sm"
+                : "bg-white border border-neutral-200 text-neutral-700 hover:bg-neutral-50"
             }`}
           >
             All APIs ({apis.length})
           </button>
           <button
             onClick={() => setActiveTab("create")}
-            className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition flex items-center gap-1.5 ${
-              activeTab === "create" ? "bg-blue-600 text-white" : "bg-white border text-slate-700"
+            className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition flex items-center gap-1.5 ${
+              activeTab === "create"
+                ? "bg-black text-white shadow-sm"
+                : "bg-white border border-neutral-200 text-neutral-700 hover:bg-neutral-50"
             }`}
           >
             <Plus className="w-3.5 h-3.5" />
@@ -126,11 +192,14 @@ export default function AdminApisPage() {
           </button>
           <button
             onClick={() => setActiveTab("providers")}
-            className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition ${
-              activeTab === "providers" ? "bg-blue-600 text-white" : "bg-white border text-slate-700"
+            className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition flex items-center gap-1.5 ${
+              activeTab === "providers"
+                ? "bg-black text-white shadow-sm"
+                : "bg-white border border-neutral-200 text-neutral-700 hover:bg-neutral-50"
             }`}
           >
-            Providers ({providers.length})
+            <Server className="w-3.5 h-3.5" />
+            <span>Upstream Providers ({providers.length})</span>
           </button>
         </div>
       </div>
@@ -147,62 +216,62 @@ export default function AdminApisPage() {
               return (
                 <div
                   key={api.id}
-                  className="bg-white rounded-xl border border-slate-200/80 p-5 shadow-sm space-y-4 hover:border-slate-300 transition"
+                  className="bg-white rounded-xl border border-neutral-200 p-5 shadow-sm space-y-4 hover:border-neutral-300 transition"
                 >
                   <div className="flex items-center justify-between">
                     <div>
-                      <span className="text-[10px] font-bold text-blue-600 bg-blue-50 border border-blue-200 px-2 py-0.5 rounded">
+                      <span className="text-[10px] font-bold text-neutral-700 bg-neutral-100 border border-neutral-200 px-2 py-0.5 rounded">
                         {api.category.name}
                       </span>
-                      <h3 className="font-bold text-base text-slate-900 mt-1">{api.name}</h3>
+                      <h3 className="font-bold text-base text-neutral-900 mt-1">{api.name}</h3>
                     </div>
-                    <span className="px-2 py-1 bg-emerald-50 text-emerald-700 font-mono text-xs font-bold rounded">
+                    <span className="px-2 py-1 bg-neutral-100 text-neutral-800 font-mono text-xs font-bold rounded border border-neutral-200">
                       {api.httpMethod}
                     </span>
                   </div>
 
                   {/* Gateway Path */}
-                  <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-200">
-                    <div className="text-[10px] text-slate-400 uppercase font-semibold">Colladome Public Gateway:</div>
-                    <code className="text-xs text-blue-600 font-mono font-bold">
+                  <div className="bg-neutral-50 p-2.5 rounded-lg border border-neutral-200">
+                    <div className="text-[10px] text-neutral-400 uppercase font-semibold">Colladome Public Gateway:</div>
+                    <code className="text-xs text-neutral-900 font-mono font-bold">
                       https://api.colladome.com{api.endpointPath}
                     </code>
                   </div>
 
                   {/* Provider Routing Details */}
                   <div className="grid grid-cols-2 gap-2 text-xs">
-                    <div className="p-2 rounded bg-slate-50 border border-slate-100">
-                      <div className="text-[10px] text-slate-400">Primary Provider:</div>
-                      <div className="font-bold text-slate-800">
+                    <div className="p-2.5 rounded-lg bg-neutral-50 border border-neutral-150">
+                      <div className="text-[10px] text-neutral-400 font-medium">Primary Provider:</div>
+                      <div className="font-bold text-neutral-900 mt-0.5">
                         {primaryMapping?.provider?.name || "Configured Provider"}
                       </div>
-                      <div className="text-[10px] text-slate-400 font-mono truncate">
+                      <div className="text-[10px] text-neutral-500 font-mono truncate mt-0.5">
                         {primaryMapping?.providerEndpoint}
                       </div>
                     </div>
 
-                    <div className="p-2 rounded bg-slate-50 border border-slate-100">
-                      <div className="text-[10px] text-slate-400">Secondary Failover:</div>
-                      <div className="font-bold text-slate-800">
+                    <div className="p-2.5 rounded-lg bg-neutral-50 border border-neutral-150">
+                      <div className="text-[10px] text-neutral-400 font-medium">Secondary Failover:</div>
+                      <div className="font-bold text-neutral-900 mt-0.5">
                         {fallbackMapping?.provider?.name || "Auto-Failover Active"}
                       </div>
-                      <div className="text-[10px] text-slate-400 font-mono truncate">
+                      <div className="text-[10px] text-neutral-500 font-mono truncate mt-0.5">
                         {fallbackMapping?.providerEndpoint || "Same Route"}
                       </div>
                     </div>
                   </div>
 
                   {/* Pricing Breakdown */}
-                  <div className="flex items-center justify-between text-xs pt-3 border-t border-slate-100">
+                  <div className="flex items-center justify-between text-xs pt-3 border-t border-neutral-100">
                     <div>
-                      <span className="text-slate-400">Cost: </span>
-                      <strong className="text-slate-700">₹{api.defaultCostPrice.toFixed(2)}</strong>
+                      <span className="text-neutral-400">Cost: </span>
+                      <strong className="text-neutral-700">₹{api.defaultCostPrice.toFixed(2)}</strong>
                     </div>
                     <div>
-                      <span className="text-slate-400">Retail Sell: </span>
-                      <strong className="text-emerald-600 font-bold">₹{api.defaultSellPrice.toFixed(2)}</strong>
+                      <span className="text-neutral-400">Retail Sell: </span>
+                      <strong className="text-neutral-900 font-bold">₹{api.defaultSellPrice.toFixed(2)}</strong>
                     </div>
-                    <div className="text-blue-600 font-bold bg-blue-50 px-2 py-0.5 rounded">
+                    <div className="text-neutral-900 font-bold bg-neutral-100 border border-neutral-200 px-2 py-0.5 rounded">
                       +₹{margin.toFixed(2)} Margin
                     </div>
                   </div>
@@ -215,21 +284,21 @@ export default function AdminApisPage() {
 
       {/* Tab 2: Add API Form */}
       {activeTab === "create" && (
-        <form onSubmit={handleCreateApi} className="bg-white rounded-xl border border-slate-200/80 p-6 shadow-sm space-y-6">
-          <div className="pb-3 border-b border-slate-100">
-            <h2 className="font-bold text-sm text-slate-900">Add New API & Route to Colladome Gateway</h2>
-            <p className="text-xs text-slate-500">
+        <form onSubmit={handleCreateApi} className="bg-white rounded-xl border border-neutral-200 p-6 shadow-sm space-y-6">
+          <div className="pb-3 border-b border-neutral-100">
+            <h2 className="font-bold text-sm text-neutral-900">Add New API & Route to Colladome Gateway</h2>
+            <p className="text-xs text-neutral-500">
               Paste upstream provider URL and payload. Colladome automatically binds it to your domain!
             </p>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">Category *</label>
+              <label className="block text-xs font-semibold text-neutral-700 mb-1">Category *</label>
               <select
                 value={form.categoryId}
                 onChange={(e) => setForm({ ...form, categoryId: e.target.value })}
-                className="w-full text-xs border border-slate-300 rounded-lg p-2.5 bg-white focus:outline-none focus:border-blue-500"
+                className="w-full text-xs border border-neutral-300 rounded-lg p-2.5 bg-white focus:outline-none focus:border-neutral-500"
               >
                 {categories.map((c) => (
                   <option key={c.id} value={c.id}>
@@ -240,35 +309,35 @@ export default function AdminApisPage() {
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">API Display Name *</label>
+              <label className="block text-xs font-semibold text-neutral-700 mb-1">API Display Name *</label>
               <input
                 type="text"
                 required
                 placeholder="e.g. Passport Verification Suite"
                 value={form.name}
                 onChange={(e) => setForm({ ...form, name: e.target.value })}
-                className="w-full text-xs border border-slate-300 rounded-lg p-2.5 focus:outline-none focus:border-blue-500"
+                className="w-full text-xs border border-neutral-300 rounded-lg p-2.5 focus:outline-none focus:border-neutral-500"
               />
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">Colladome Gateway Endpoint Path *</label>
+              <label className="block text-xs font-semibold text-neutral-700 mb-1">Colladome Gateway Endpoint Path *</label>
               <input
                 type="text"
                 required
                 placeholder="/v1/verification/passport"
                 value={form.endpointPath}
                 onChange={(e) => setForm({ ...form, endpointPath: e.target.value })}
-                className="w-full text-xs font-mono text-blue-600 border border-slate-300 rounded-lg p-2.5 focus:outline-none focus:border-blue-500"
+                className="w-full text-xs font-mono text-neutral-900 font-semibold border border-neutral-300 rounded-lg p-2.5 focus:outline-none focus:border-neutral-500"
               />
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">HTTP Method</label>
+              <label className="block text-xs font-semibold text-neutral-700 mb-1">HTTP Method</label>
               <select
                 value={form.httpMethod}
                 onChange={(e) => setForm({ ...form, httpMethod: e.target.value })}
-                className="w-full text-xs border border-slate-300 rounded-lg p-2.5 bg-white font-bold"
+                className="w-full text-xs border border-neutral-300 rounded-lg p-2.5 bg-white font-bold"
               >
                 <option value="POST">POST</option>
                 <option value="GET">GET</option>
@@ -276,7 +345,7 @@ export default function AdminApisPage() {
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">
+              <label className="block text-xs font-semibold text-neutral-700 mb-1">
                 Cost Price (Paid to Provider) (₹) *
               </label>
               <input
@@ -285,12 +354,12 @@ export default function AdminApisPage() {
                 required
                 value={form.defaultCostPrice}
                 onChange={(e) => setForm({ ...form, defaultCostPrice: Number(e.target.value) })}
-                className="w-full text-xs border border-slate-300 rounded-lg p-2.5 font-bold"
+                className="w-full text-xs border border-neutral-300 rounded-lg p-2.5 font-bold"
               />
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">
+              <label className="block text-xs font-semibold text-neutral-700 mb-1">
                 Retail Selling Price (Client Debit) (₹) *
               </label>
               <input
@@ -299,25 +368,25 @@ export default function AdminApisPage() {
                 required
                 value={form.defaultSellPrice}
                 onChange={(e) => setForm({ ...form, defaultSellPrice: Number(e.target.value) })}
-                className="w-full text-xs border border-slate-300 rounded-lg p-2.5 font-bold text-emerald-600"
+                className="w-full text-xs border border-neutral-300 rounded-lg p-2.5 font-bold text-neutral-900"
               />
             </div>
           </div>
 
           {/* Upstream Provider Mapping Box */}
-          <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-4">
-            <h3 className="text-xs font-bold text-slate-800 uppercase flex items-center gap-1.5">
-              <Cpu className="w-4 h-4 text-blue-600" />
+          <div className="bg-neutral-50 p-4 rounded-xl border border-neutral-200 space-y-4">
+            <h3 className="text-xs font-bold text-neutral-900 uppercase flex items-center gap-1.5">
+              <Cpu className="w-4 h-4 text-neutral-700" />
               <span>Multi-Provider Routing & Redundancy</span>
             </h3>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">Primary Upstream Provider</label>
+                <label className="block text-xs font-semibold text-neutral-700 mb-1">Primary Upstream Provider</label>
                 <select
                   value={form.primaryProviderId}
                   onChange={(e) => setForm({ ...form, primaryProviderId: e.target.value })}
-                  className="w-full text-xs border border-slate-300 rounded-lg p-2 bg-white font-semibold"
+                  className="w-full text-xs border border-neutral-300 rounded-lg p-2 bg-white font-semibold"
                 >
                   {providers.map((p) => (
                     <option key={p.id} value={p.id}>
@@ -330,18 +399,18 @@ export default function AdminApisPage() {
                   placeholder="Primary Provider URL Endpoint (e.g. /api/v1/in/identity/passport)"
                   value={form.primaryEndpoint}
                   onChange={(e) => setForm({ ...form, primaryEndpoint: e.target.value })}
-                  className="w-full mt-2 text-xs font-mono border border-slate-300 rounded-lg p-2"
+                  className="w-full mt-2 text-xs font-mono border border-neutral-300 rounded-lg p-2"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                <label className="block text-xs font-semibold text-neutral-700 mb-1">
                   Secondary Fallback Provider (Auto Failover)
                 </label>
                 <select
                   value={form.secondaryProviderId}
                   onChange={(e) => setForm({ ...form, secondaryProviderId: e.target.value })}
-                  className="w-full text-xs border border-slate-300 rounded-lg p-2 bg-white font-semibold"
+                  className="w-full text-xs border border-neutral-300 rounded-lg p-2 bg-white font-semibold"
                 >
                   <option value="">None (Single Provider)</option>
                   {providers.map((p) => (
@@ -355,7 +424,7 @@ export default function AdminApisPage() {
                   placeholder="Fallback Endpoint (e.g. /v3/tasks/verify/passport)"
                   value={form.secondaryEndpoint}
                   onChange={(e) => setForm({ ...form, secondaryEndpoint: e.target.value })}
-                  className="w-full mt-2 text-xs font-mono border border-slate-300 rounded-lg p-2"
+                  className="w-full mt-2 text-xs font-mono border border-neutral-300 rounded-lg p-2"
                 />
               </div>
             </div>
@@ -364,34 +433,34 @@ export default function AdminApisPage() {
           {/* JSON Schemas */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">
+              <label className="block text-xs font-semibold text-neutral-700 mb-1">
                 Client Request Parameters Schema (JSON)
               </label>
               <textarea
                 rows={5}
                 value={form.requestSchemaText}
                 onChange={(e) => setForm({ ...form, requestSchemaText: e.target.value })}
-                className="w-full font-mono text-xs border border-slate-300 rounded-lg p-2.5 text-blue-600"
+                className="w-full font-mono text-xs border border-neutral-300 rounded-lg p-2.5 text-neutral-900"
               ></textarea>
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">
+              <label className="block text-xs font-semibold text-neutral-700 mb-1">
                 Standard Sanitized Response Schema (JSON)
               </label>
               <textarea
                 rows={5}
                 value={form.responseSchemaText}
                 onChange={(e) => setForm({ ...form, responseSchemaText: e.target.value })}
-                className="w-full font-mono text-xs border border-slate-300 rounded-lg p-2.5 text-emerald-600"
+                className="w-full font-mono text-xs border border-neutral-300 rounded-lg p-2.5 text-neutral-900"
               ></textarea>
             </div>
           </div>
 
-          <div className="flex justify-end gap-3 pt-4 border-t border-slate-100">
+          <div className="flex justify-end gap-3 pt-4 border-t border-neutral-150">
             <button
               type="submit"
-              className="px-6 py-2.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs transition"
+              className="px-6 py-2.5 rounded-lg bg-black hover:bg-neutral-800 text-white font-semibold text-xs transition"
             >
               Deploy API to Gateway
             </button>
@@ -401,20 +470,256 @@ export default function AdminApisPage() {
 
       {/* Tab 3: Providers */}
       {activeTab === "providers" && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          {providers.map((p) => (
-            <div key={p.id} className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm space-y-3">
-              <div className="flex items-center justify-between">
-                <h3 className="font-bold text-slate-900">{p.name}</h3>
-                <span className="font-mono text-xs font-bold bg-slate-100 px-2 py-0.5 rounded">{p.code}</span>
+        <div className="space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {providers.map((p) => (
+              <div
+                key={p.id}
+                className="bg-white rounded-xl border border-neutral-200 p-5 shadow-sm space-y-4 hover:border-neutral-300 transition flex flex-col justify-between"
+              >
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <h3 className="font-bold text-neutral-900 text-base">{p.name}</h3>
+                      <span className="font-mono text-[10px] font-bold bg-neutral-100 text-neutral-700 border border-neutral-200 px-2 py-0.5 rounded">
+                        {p.code}
+                      </span>
+                    </div>
+
+                    <span
+                      className={`text-[10px] font-bold px-2 py-0.5 rounded border ${
+                        p.isSimulation
+                          ? "bg-amber-50 text-amber-800 border-amber-200"
+                          : "bg-emerald-50 text-emerald-800 border-emerald-200"
+                      }`}
+                    >
+                      {p.isSimulation ? "Simulation / Mock" : "Live Production"}
+                    </span>
+                  </div>
+
+                  <div className="bg-neutral-50 p-2.5 rounded-lg border border-neutral-200 space-y-1">
+                    <div className="text-[10px] text-neutral-400 font-semibold uppercase">Base URL</div>
+                    <code className="text-xs text-neutral-800 font-mono block break-all font-semibold">
+                      {p.baseUrl || "https://api.upstream.com"}
+                    </code>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2 text-xs">
+                    <div className="p-2.5 rounded-lg bg-neutral-50 border border-neutral-150">
+                      <span className="text-[10px] text-neutral-400 block font-medium">Auth Method</span>
+                      <span className="font-mono font-semibold text-neutral-800 text-[11px] mt-0.5 block">
+                        {p.authType}
+                      </span>
+                    </div>
+
+                    <div className="p-2.5 rounded-lg bg-neutral-50 border border-neutral-150">
+                      <span className="text-[10px] text-neutral-400 block font-medium">API Key Credential</span>
+                      <span className="font-mono font-semibold text-neutral-800 text-[11px] mt-0.5 block truncate">
+                        {p.keyHint || "Not Configured"}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2 text-[11px] text-neutral-500 pt-1">
+                    <Lock className="w-3.5 h-3.5 text-neutral-400 shrink-0" />
+                    <span>Encrypted with AES-256-GCM. Unencrypted keys are never logged.</span>
+                  </div>
+                </div>
+
+                <div className="pt-3 border-t border-neutral-100 flex items-center justify-between">
+                  <div className="text-[11px] text-neutral-400">
+                    Active Status: <span className="font-semibold text-neutral-700">{p.isActive ? "Online" : "Paused"}</span>
+                  </div>
+
+                  <button
+                    onClick={() => handleOpenProviderModal(p)}
+                    className="px-3 py-1.5 rounded-lg bg-black hover:bg-neutral-800 text-white font-semibold text-xs transition flex items-center gap-1.5 shadow-sm"
+                  >
+                    <Sliders className="w-3.5 h-3.5" />
+                    <span>Configure Credentials & Mode</span>
+                  </button>
+                </div>
               </div>
-              <div className="text-xs text-slate-500 font-mono">{p.baseUrl}</div>
-              <div className="text-xs text-slate-600">Auth Method: <strong>{p.authType}</strong></div>
-              <div className="text-[11px] text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded border border-emerald-200 inline-block font-medium">
-                Encrypted with AES-256-GCM
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Provider Credential Configuration Modal */}
+      {providerModalOpen && selectedProvider && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-white rounded-2xl border border-neutral-200 shadow-2xl max-w-lg w-full overflow-hidden">
+            {/* Modal Header */}
+            <div className="p-5 border-b border-neutral-100 flex items-center justify-between bg-neutral-50">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-lg bg-black text-white flex items-center justify-center font-bold text-xs">
+                  {selectedProvider.code}
+                </div>
+                <div>
+                  <h3 className="font-bold text-neutral-900 text-sm">
+                    Configure Upstream Provider: {selectedProvider.name}
+                  </h3>
+                  <p className="text-[11px] text-neutral-500">
+                    Live external HTTP dispatcher settings and encrypted credentials
+                  </p>
+                </div>
               </div>
+              <button
+                onClick={() => setProviderModalOpen(false)}
+                className="p-1 rounded-lg text-neutral-400 hover:text-neutral-700 hover:bg-neutral-200 transition"
+              >
+                <X className="w-4 h-4" />
+              </button>
             </div>
-          ))}
+
+            {/* Modal Form */}
+            <form onSubmit={handleSaveProvider} className="p-6 space-y-4">
+              {/* Base URL */}
+              <div>
+                <label className="block text-xs font-semibold text-neutral-700 mb-1">
+                  Provider Base URL *
+                </label>
+                <input
+                  type="url"
+                  required
+                  placeholder="https://live.zoop.one"
+                  value={providerForm.baseUrl}
+                  onChange={(e) => setProviderForm({ ...providerForm, baseUrl: e.target.value })}
+                  className="w-full text-xs font-mono border border-neutral-300 rounded-lg p-2.5 focus:outline-none focus:border-neutral-500"
+                />
+              </div>
+
+              {/* API Key */}
+              <div>
+                <label className="block text-xs font-semibold text-neutral-700 mb-1">
+                  Provider API Key / Client ID
+                </label>
+                <input
+                  type="password"
+                  placeholder={
+                    selectedProvider.keyHint !== "Not Configured"
+                      ? `Keep existing encrypted key (${selectedProvider.keyHint}) or enter new`
+                      : "Enter upstream API key"
+                  }
+                  value={providerForm.apiKey}
+                  onChange={(e) => setProviderForm({ ...providerForm, apiKey: e.target.value })}
+                  className="w-full text-xs font-mono border border-neutral-300 rounded-lg p-2.5 focus:outline-none focus:border-neutral-500"
+                />
+                <p className="text-[10px] text-neutral-400 mt-0.5">
+                  Leave blank to retain current key if already configured.
+                </p>
+              </div>
+
+              {/* API Secret */}
+              <div>
+                <label className="block text-xs font-semibold text-neutral-700 mb-1">
+                  Provider API Secret / App Secret
+                </label>
+                <input
+                  type="password"
+                  placeholder={
+                    selectedProvider.hasSecret
+                      ? "Keep existing secret or enter new"
+                      : "Optional secret or token"
+                  }
+                  value={providerForm.apiSecret}
+                  onChange={(e) => setProviderForm({ ...providerForm, apiSecret: e.target.value })}
+                  className="w-full text-xs font-mono border border-neutral-300 rounded-lg p-2.5 focus:outline-none focus:border-neutral-500"
+                />
+              </div>
+
+              {/* Auth Type */}
+              <div>
+                <label className="block text-xs font-semibold text-neutral-700 mb-1">
+                  Authentication Header Format
+                </label>
+                <select
+                  value={providerForm.authType}
+                  onChange={(e) => setProviderForm({ ...providerForm, authType: e.target.value })}
+                  className="w-full text-xs border border-neutral-300 rounded-lg p-2.5 bg-white font-mono"
+                >
+                  <option value="HEADER_API_KEY">HEADER_API_KEY (x-api-key: [key])</option>
+                  <option value="BEARER_TOKEN">BEARER_TOKEN (Authorization: Bearer [key])</option>
+                  <option value="BASIC_AUTH">BASIC_AUTH (Basic [base64(key:secret)])</option>
+                </select>
+              </div>
+
+              {/* Execution Mode Radio Selector */}
+              <div className="space-y-2 pt-1">
+                <label className="block text-xs font-semibold text-neutral-700">
+                  Execution Dispatcher Mode
+                </label>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <div
+                    onClick={() => setProviderForm({ ...providerForm, isSimulation: true })}
+                    className={`p-3 rounded-xl border cursor-pointer transition ${
+                      providerForm.isSimulation
+                        ? "bg-neutral-900 text-white border-neutral-900"
+                        : "bg-white border-neutral-200 text-neutral-700 hover:bg-neutral-50"
+                    }`}
+                  >
+                    <div className="font-bold text-xs flex items-center justify-between">
+                      <span>Sandbox Simulation</span>
+                      {providerForm.isSimulation && <CheckCircle2 className="w-3.5 h-3.5 text-white" />}
+                    </div>
+                    <div className={`text-[10px] mt-1 ${providerForm.isSimulation ? "text-neutral-300" : "text-neutral-500"}`}>
+                      Deterministic response from mock engine without consuming upstream credits.
+                    </div>
+                  </div>
+
+                  <div
+                    onClick={() => setProviderForm({ ...providerForm, isSimulation: false })}
+                    className={`p-3 rounded-xl border cursor-pointer transition ${
+                      !providerForm.isSimulation
+                        ? "bg-neutral-900 text-white border-neutral-900"
+                        : "bg-white border-neutral-200 text-neutral-700 hover:bg-neutral-50"
+                    }`}
+                  >
+                    <div className="font-bold text-xs flex items-center justify-between">
+                      <span>Live Production</span>
+                      {!providerForm.isSimulation && <CheckCircle2 className="w-3.5 h-3.5 text-white" />}
+                    </div>
+                    <div className={`text-[10px] mt-1 ${!providerForm.isSimulation ? "text-neutral-300" : "text-neutral-500"}`}>
+                      Direct HTTP fetch() to provider's baseUrl with real-time failover.
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Active Toggle */}
+              <div className="flex items-center gap-2 pt-1">
+                <input
+                  type="checkbox"
+                  id="isActiveToggle"
+                  checked={providerForm.isActive}
+                  onChange={(e) => setProviderForm({ ...providerForm, isActive: e.target.checked })}
+                  className="rounded border-neutral-300 text-black focus:ring-black"
+                />
+                <label htmlFor="isActiveToggle" className="text-xs font-semibold text-neutral-700 cursor-pointer">
+                  Provider is Active & accepting gateway requests
+                </label>
+              </div>
+
+              {/* Modal Actions */}
+              <div className="flex items-center justify-end gap-2 pt-4 border-t border-neutral-150">
+                <button
+                  type="button"
+                  onClick={() => setProviderModalOpen(false)}
+                  className="px-4 py-2 rounded-lg text-xs font-semibold border border-neutral-200 text-neutral-700 hover:bg-neutral-50 transition"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={savingProvider}
+                  className="px-5 py-2 rounded-lg text-xs font-semibold bg-black hover:bg-neutral-800 text-white transition shadow-sm disabled:opacity-50"
+                >
+                  {savingProvider ? "Encrypting & Saving..." : "Save Provider Configuration"}
+                </button>
+              </div>
+            </form>
+          </div>
         </div>
       )}
     </div>

@@ -26,6 +26,15 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const pathname = usePathname();
   const [showProfileMenu, setShowProfileMenu] = useState(false);
 
+  const handleLogout = async () => {
+    try {
+      await fetch("/api/internal/auth/logout", { method: "POST" });
+    } catch (e) {
+      console.error(e);
+    }
+    window.location.href = "/login";
+  };
+
   const sections = [
     {
       title: "CORE",
@@ -123,12 +132,13 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                 >
                   View Developer Docs
                 </Link>
-                <Link
-                  href="/login"
-                  className="block px-3 py-1.5 rounded-lg hover:bg-slate-100 text-rose-600 font-medium"
+                <button
+                  type="button"
+                  onClick={handleLogout}
+                  className="w-full text-left block px-3 py-1.5 rounded-lg hover:bg-rose-50 text-rose-600 font-semibold transition"
                 >
                   Logout
-                </Link>
+                </button>
               </div>
             )}
           </div>

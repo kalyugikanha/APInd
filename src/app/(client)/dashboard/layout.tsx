@@ -30,6 +30,15 @@ export default function ClientDashboardLayout({ children }: { children: React.Re
       .catch((err) => console.error(err));
   }, []);
 
+  const handleLogout = async () => {
+    try {
+      await fetch("/api/internal/auth/logout", { method: "POST" });
+    } catch (e) {
+      console.error(e);
+    }
+    window.location.href = "/login";
+  };
+
   const sections = [
     {
       title: "WORKSPACE",
@@ -124,12 +133,13 @@ export default function ClientDashboardLayout({ children }: { children: React.Re
                 >
                   API Documentation
                 </Link>
-                <Link
-                  href="/login"
-                  className="block px-3 py-1.5 rounded-lg hover:bg-slate-100 text-rose-600 font-medium"
+                <button
+                  type="button"
+                  onClick={handleLogout}
+                  className="w-full text-left block px-3 py-1.5 rounded-lg hover:bg-rose-50 text-rose-600 font-semibold transition"
                 >
                   Logout
-                </Link>
+                </button>
               </div>
             )}
           </div>

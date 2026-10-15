@@ -30,17 +30,43 @@ export default function LoginPage() {
   const [companyName, setCompanyName] = useState("");
   const [contactPerson, setContactPerson] = useState("");
   const [loading, setLoading] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
+    setErrorMsg(null);
+    setSuccessMsg(null);
+
+    const redirectParam = typeof window !== "undefined"
+      ? new URLSearchParams(window.location.search).get("redirect")
+      : null;
 
     if (mode === "login") {
-      // Demo credentials check or redirect
-      if (email.toLowerCase().includes("admin")) {
-        router.push("/admin/dashboard");
-      } else {
-        router.push("/dashboard");
+      try {
+        const res = await fetch("/api/internal/auth/login", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email, password }),
+        });
+
+        const data = await res.json();
+        if (!res.ok) {
+          throw new Error(data.error || "Authentication failed");
+        }
+
+        setSuccessMsg(data.message || "Login successful! Redirecting...");
+        const destination = redirectParam || data.redirectUrl || "/dashboard";
+        
+        setTimeout(() => {
+          router.push(destination);
+          router.refresh();
+        }, 400);
+      } catch (err: any) {
+        setErrorMsg(err.message || "Invalid credentials. Please try again.");
+      } finally {
+        setLoading(false);
       }
     } else {
       // Sign up flow: provision trial sandbox
@@ -57,13 +83,23 @@ export default function LoginPage() {
         });
         const data = await res.json();
         if (res.ok) {
-          alert(`Account created! Welcome to Colladome. Redirecting to your dashboard...`);
-          router.push("/dashboard");
+          setSuccessMsg("Account created! Logging you into your sandbox dashboard...");
+          // Log into session
+          const loginRes = await fetch("/api/internal/auth/login", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ email, password: password || "Colladome@123" }),
+          });
+          const loginData = await loginRes.json();
+          setTimeout(() => {
+            router.push(loginData.redirectUrl || "/dashboard");
+            router.refresh();
+          }, 600);
         } else {
-          alert(data.error || "Failed to create account");
+          setErrorMsg(data.error || "Failed to create account");
         }
       } catch (err: any) {
-        alert("Error: " + err.message);
+        setErrorMsg(err.message || "Registration failed");
       } finally {
         setLoading(false);
       }
@@ -120,6 +156,20 @@ export default function LoginPage() {
 
           {/* Form Container Card */}
           <div className="bg-white rounded-2xl border border-slate-200/80 p-6 sm:p-8 shadow-sm">
+            {errorMsg && (
+              <div className="mb-4 p-3 bg-rose-50 border border-rose-200 rounded-xl text-xs font-semibold text-rose-800 flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-rose-600 shrink-0" />
+                <span>{errorMsg}</span>
+              </div>
+            )}
+
+            {successMsg && (
+              <div className="mb-4 p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-xs font-semibold text-emerald-800 flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-emerald-600 shrink-0" />
+                <span>{successMsg}</span>
+              </div>
+            )}
+
             <form onSubmit={handleSubmit} className="space-y-4">
               {mode === "signup" && (
                 <>
