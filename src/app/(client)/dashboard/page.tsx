@@ -99,14 +99,14 @@ export default function ClientDashboardOverview() {
 
         <div className="bg-white p-5 rounded-xl border border-neutral-200 shadow-sm">
           <div className="flex items-center justify-between text-neutral-500">
-            <span className="text-xs font-semibold uppercase tracking-wider">Bank Verifications</span>
+            <span className="text-xs font-semibold uppercase tracking-wider">IFSC &amp; Bank Verifications</span>
             <TrendingUp className="w-4 h-4 text-neutral-400" />
           </div>
           <div className="text-2xl font-extrabold text-neutral-900 mt-2">
             {profile?.stats?.totalBankHits ?? 0}
           </div>
           <div className="text-[11px] text-neutral-400 mt-2 pt-2 border-t border-neutral-100">
-            Penny Drop Suite
+            IFSC Lookup &amp; Banking Suite
           </div>
         </div>
       </div>

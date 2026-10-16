@@ -237,6 +237,117 @@ async function runTests() {
     console.error("❌ TEST 6 FAILED:", data6);
   }
 
+  // TEST 7: Dynamic Zoop Morpher Studio (Create new /rc-verification/v1/ endpoint, call it dynamically, and delete)
+  console.log("\n--- TEST 7: Dynamic Zoop Morpher Studio (/rc-verification/v1/) & Universal Gateway ---");
+  await db.wallet.update({ where: { userId: user.id }, data: { balance: 50.0 } });
+  const { POST: adminCreateApi, PATCH: adminPatchApi, DELETE: adminDeleteApi } = await import(
+    "@/app/api/internal/admin/apis/route"
+  );
+  const { POST: universalGatewayPost } = await import("@/app/api/gateway/[...slug]/route");
+
+  const createReq = makeReq(
+    "http://localhost:3000/api/internal/admin/apis",
+    "POST",
+    {},
+    {
+      name: "Vehicle RC Verification (Zoop Lite)",
+      endpointPath: "/rc-verification/v1/",
+      upstreamUrl: "https://test.zoop.one/api/v1/in/vehicle/rc/lite",
+      httpMethod: "POST",
+      defaultCostPrice: 1.5,
+      defaultSellPrice: 2.8,
+      requestSchema: JSON.stringify({
+        mode: { type: "string", example: "sync" },
+        data: {
+          type: "object",
+          example: {
+            vehicle_registration_number: "MH01AB1234",
+            consent: "Y",
+            consent_text: "I hear by declare my consent agreement for fetching my information via Colladome API",
+          },
+        },
+      }),
+      responseSchema: JSON.stringify({
+        result: {
+          rc_registration_number: "MH01AB1234",
+          owner_name: "AARAV PATEL",
+          vehicle_class: "LMV",
+          rc_status: "ACTIVE",
+        },
+      }),
+    }
+  );
+  const createRes = await adminCreateApi(createReq);
+  const createdData = await createRes.json();
+  const createdApiId = createdData.api?.id;
+
+  // Test PATCH rate update
+  const patchReq = makeReq(
+    "http://localhost:3000/api/internal/admin/apis",
+    "PATCH",
+    {},
+    {
+      apiId: createdApiId,
+      defaultCostPrice: 1.6,
+      defaultSellPrice: 3.0,
+    }
+  );
+  const patchRes = await adminPatchApi(patchReq);
+  const patchData = await patchRes.json();
+  if (patchRes.ok && patchData.api?.defaultSellPrice === 3.0) {
+    console.log("✅ TEST 7A PASSED: Admin PATCH updated API sell rate to ₹3.00");
+  } else {
+    console.error("❌ TEST 7A FAILED:", patchData);
+  }
+
+  // Now call the newly created /rc-verification/v1 endpoint via the Universal Gateway Route
+  const rcCallReq = makeReq(
+    `http://localhost:3000/rc-verification/v1/?api_key=${rawLiveKey}`,
+    "POST",
+    {},
+    {
+      mode: "sync",
+      data: {
+        vehicle_registration_number: "DL01CA9999",
+        consent: "Y",
+        consent_text: "I hear by declare my consent agreement for fetching my information via Colladome API",
+      },
+      task_id: "rc-order-777",
+    }
+  );
+  const rcCallRes = await universalGatewayPost(rcCallReq, {
+    params: { slug: ["rc-verification", "v1"] },
+  });
+  const rcCallData = await rcCallRes.json();
+  if (
+    rcCallRes.status === 200 &&
+    rcCallData.response_code === "100" &&
+    rcCallData.client_order_id === "rc-order-777" &&
+    rcCallData.result?.vehicle_registration_number === "DL01CA9999" &&
+    !rcCallData.group_id &&
+    !rcCallData.request_id
+  ) {
+    console.log(
+      "✅ TEST 7B PASSED: Universal Gateway dynamically routed /rc-verification/v1/ and returned morphed Colladome payload!"
+    );
+  } else {
+    console.error("❌ TEST 7B FAILED:", rcCallData);
+  }
+
+  // Wait for async log write, then delete the temporary RC API via DELETE handler
+  await new Promise((resolve) => setTimeout(resolve, 400));
+  const deleteReq = makeReq(
+    `http://localhost:3000/api/internal/admin/apis?id=${createdApiId}`,
+    "DELETE",
+    {}
+  );
+  const deleteRes = await adminDeleteApi(deleteReq);
+  if (deleteRes.ok) {
+    console.log("✅ TEST 7C PASSED: Admin DELETE cleanly removed temporary API & cascade records");
+  } else {
+    console.error("❌ TEST 7C FAILED:", await deleteRes.text());
+  }
+
   // Clean up test client with cascading deletes
   await db.bankReport.deleteMany({ where: { userId: user.id } });
   await db.panReport.deleteMany({ where: { userId: user.id } });

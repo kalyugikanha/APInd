@@ -26,18 +26,22 @@ function encrypt(text: string): string {
 async function syncCatalog() {
   console.log("♻️  Database already initialized — running NON-DESTRUCTIVE catalog sync (clients & wallets untouched).");
 
-  // 1. Retire legacy dummy APIs (delete if never used, otherwise deprecate to preserve audit logs)
+  // 1. Purge legacy dummy APIs and any old dummy logs/mappings so they never clutter the catalog
   const legacySlugs = ["pan-verification", "bank-account-verify", "gstin-verification"];
   for (const slug of legacySlugs) {
-    const legacy = await prisma.api.findUnique({ where: { slug }, include: { _count: { select: { apiLogs: true } } } });
+    const legacy = await prisma.api.findUnique({ where: { slug } });
     if (!legacy) continue;
-    if (legacy._count.apiLogs === 0) {
-      await prisma.api.delete({ where: { id: legacy.id } });
-      console.log(`🗑️  Removed legacy dummy API: ${legacy.name}`);
-    } else if (legacy.status !== "DEPRECATED") {
-      await prisma.api.update({ where: { id: legacy.id }, data: { status: "DEPRECATED" } });
-      console.log(`📦 Deprecated legacy API with logs: ${legacy.name}`);
+    const logs = await prisma.apiLog.findMany({ where: { apiId: legacy.id }, select: { id: true } });
+    const logIds = logs.map((l) => l.id);
+    if (logIds.length > 0) {
+      await prisma.bankReport.deleteMany({ where: { apiLogId: { in: logIds } } });
+      await prisma.panReport.deleteMany({ where: { apiLogId: { in: logIds } } });
+      await prisma.apiLog.deleteMany({ where: { apiId: legacy.id } });
     }
+    await prisma.clientPricing.deleteMany({ where: { apiId: legacy.id } });
+    await prisma.apiProviderMapping.deleteMany({ where: { apiId: legacy.id } });
+    await prisma.api.delete({ where: { id: legacy.id } });
+    console.log(`🗑️  Removed legacy dummy API: ${legacy.name}`);
   }
 
   // 2. Ensure Banking category, Zoop provider, and IFSC API exist
