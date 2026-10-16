@@ -19,7 +19,7 @@ if (!process.env.DATABASE_URL) {
 if (isPostgres) {
   console.log('🔄 Checking production PostgreSQL database schema and initial seed...');
   try {
-    execSync('npx prisma db push --accept-data-loss', { stdio: 'inherit', env: process.env });
+    execSync('npx prisma db push --accept-data-loss --skip-generate', { stdio: 'inherit', env: process.env });
     console.log('🌱 Ensuring initial platform seed data is in place...');
     execSync('npx tsx prisma/seed.ts', { stdio: 'inherit', env: process.env });
     console.log('✅ Production PostgreSQL database is ready and in sync.');
@@ -29,7 +29,7 @@ if (isPostgres) {
 } else {
   console.log('📁 Verifying SQLite database status...');
   try {
-    execSync('npx prisma db push --accept-data-loss', { stdio: 'inherit', env: process.env });
+    execSync('npx prisma db push --accept-data-loss --skip-generate', { stdio: 'inherit', env: process.env });
     execSync('npx tsx prisma/seed.ts', { stdio: 'inherit', env: process.env });
     console.log('✅ SQLite database is ready and in sync.');
   } catch (err) {
