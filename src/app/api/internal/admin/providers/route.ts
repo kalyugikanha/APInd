@@ -30,6 +30,7 @@ export async function GET(req: NextRequest) {
         isActive: p.isActive,
         isSimulation: creds.isSimulation !== false,
         keyHint: creds.apiKey ? `...${creds.apiKey.slice(-4)}` : "Not Configured",
+        appIdHint: creds.appId ? `...${String(creds.appId).slice(-4)}` : "Not Configured",
         hasSecret: Boolean(creds.apiSecret),
         mappingsCount: p._count.mappings,
         createdAt: p.createdAt,
@@ -46,7 +47,7 @@ export async function GET(req: NextRequest) {
 export async function PUT(req: NextRequest) {
   try {
     const body = await req.json();
-    const { id, baseUrl, apiKey, apiSecret, authType, isActive, isSimulation } = body;
+    const { id, baseUrl, apiKey, apiSecret, appId, authType, isActive, isSimulation } = body;
 
     if (!id) {
       return NextResponse.json({ error: "Provider ID is required" }, { status: 400 });
@@ -65,8 +66,10 @@ export async function PUT(req: NextRequest) {
     }
 
     const updatedCreds = {
+      ...currentCreds,
       apiKey: apiKey !== undefined && apiKey !== "" ? apiKey : currentCreds.apiKey || "",
       apiSecret: apiSecret !== undefined && apiSecret !== "" ? apiSecret : currentCreds.apiSecret || "",
+      appId: appId !== undefined && appId !== "" ? appId : currentCreds.appId || "",
       isSimulation: isSimulation !== undefined ? isSimulation : currentCreds.isSimulation,
     };
 

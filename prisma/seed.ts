@@ -1,5 +1,6 @@
 import { PrismaClient } from "@prisma/client";
 import crypto from "crypto";
+import { ifscApiData } from "./ifscApi";
 
 const prisma = new PrismaClient();
 
@@ -18,10 +19,74 @@ function encrypt(text: string): string {
   return `${iv.toString("hex")}:${tag.toString("hex")}:${encrypted}`;
 }
 
+/**
+ * Non-destructive catalog sync for an already-initialized database (e.g. Render restart/redeploy).
+ * Keeps all clients, wallets, keys and logs. Retires legacy dummy APIs and ensures the IFSC API exists.
+ */
+async function syncCatalog() {
+  console.log("♻️  Database already initialized — running NON-DESTRUCTIVE catalog sync (clients & wallets untouched).");
+
+  // 1. Retire legacy dummy APIs (delete if never used, otherwise deprecate to preserve audit logs)
+  const legacySlugs = ["pan-verification", "bank-account-verify", "gstin-verification"];
+  for (const slug of legacySlugs) {
+    const legacy = await prisma.api.findUnique({ where: { slug }, include: { _count: { select: { apiLogs: true } } } });
+    if (!legacy) continue;
+    if (legacy._count.apiLogs === 0) {
+      await prisma.api.delete({ where: { id: legacy.id } });
+      console.log(`🗑️  Removed legacy dummy API: ${legacy.name}`);
+    } else if (legacy.status !== "DEPRECATED") {
+      await prisma.api.update({ where: { id: legacy.id }, data: { status: "DEPRECATED" } });
+      console.log(`📦 Deprecated legacy API with logs: ${legacy.name}`);
+    }
+  }
+
+  // 2. Ensure Banking category, Zoop provider, and IFSC API exist
+  const catBanking = await prisma.apiCategory.upsert({
+    where: { slug: "banking-financials" },
+    update: {},
+    create: {
+      name: "Banking & Financials",
+      slug: "banking-financials",
+      description: "Instant IFSC bank branch lookups, penny drop account verification, and UPI validation.",
+      icon: "Building2",
+      sortOrder: 1,
+    },
+  });
+
+  let zoop = await prisma.provider.findUnique({ where: { code: "ZOOP" } });
+  if (!zoop) {
+    zoop = await prisma.provider.create({
+      data: {
+        name: "Zoop.one",
+        code: "ZOOP",
+        baseUrl: "https://test.zoop.one",
+        authType: "HEADER_API_KEY",
+        credentialsEnc: encrypt(JSON.stringify({ apiKey: "", appId: "", isSimulation: true })),
+        isActive: true,
+      },
+    });
+  }
+
+  const existingIfsc = await prisma.api.findUnique({ where: { slug: "ifsc-verification" } });
+  if (!existingIfsc) {
+    await prisma.api.create({ data: ifscApiData(catBanking.id, zoop.id) });
+    console.log("✅ IFSC Code Verification API added to catalog.");
+  } else {
+    console.log("✅ IFSC Code Verification API already present.");
+  }
+}
+
 async function main() {
   console.log("--------------------------------------------------");
   console.log("🌱 Initializing Clean Production Colladome Platform...");
   console.log("--------------------------------------------------");
+
+  // SAFETY: never wipe a live database on restart. Full reset requires FORCE_RESEED=true.
+  const existingAdmin = await prisma.user.findUnique({ where: { email: "admin@colladome.com" } });
+  if (existingAdmin && process.env.FORCE_RESEED !== "true") {
+    await syncCatalog();
+    return;
+  }
 
   // Clean old sample/dummy data to ensure pristine state
   await prisma.bankReport.deleteMany();
@@ -164,99 +229,7 @@ async function main() {
 
   // 4. Official Real Gateway API: IFSC Code Verification (Zoop Lite API Morpher)
   // Dummy APIs (PAN, Bank Penny Drop, GSTIN) are completely removed!
-  const apiIfsc = await prisma.api.create({
-    data: {
-      categoryId: catBanking.id,
-      name: "IFSC Code Verification",
-      slug: "ifsc-verification",
-      endpointPath: "/ifsc-verification/v1",
-      httpMethod: "POST",
-      description:
-        "Validates 11-character Indian Financial System Code (IFSC) and returns real-time verified bank branch details including bank name, branch address, contact, MICR, UPI, NEFT, IMPS, and RTGS support status.",
-      useCase: "Bank branch lookup, penny drop pre-validation, IMPS/NEFT routing, and vendor payout onboarding.",
-      status: "ACTIVE",
-      defaultCostPrice: 0.50,
-      defaultSellPrice: 1.20,
-      requestSchema: JSON.stringify({
-        ifsc: {
-          type: "string",
-          required: true,
-          example: "THRS0000XXX",
-          description: "11-character alphanumeric Indian bank IFSC code",
-        },
-        mode: {
-          type: "string",
-          required: false,
-          example: "sync",
-          description: "Execution mode ('sync')",
-        },
-        consent: {
-          type: "string",
-          required: false,
-          example: "Y",
-          description: "User consent (Y/N)",
-        },
-        consent_text: {
-          type: "string",
-          required: false,
-          example: "I hear by declare my consent agreement for fetching my information via Colladome API",
-          description: "Consent declaration text",
-        },
-        task_id: {
-          type: "string",
-          required: false,
-          example: "f26eb21e-4c35-4491-b2d5-41fa0e545a34",
-          description: "Optional client order tracking UUID",
-        },
-      }),
-      responseSchema: JSON.stringify({
-        success: true,
-        response_code: "100",
-        response_message: "Valid Authentication",
-        colladome_order_id: "CDO_20261016_883291",
-        client_order_id: "f26eb21e-4c35-4491-b2d5-41fa0e545a34",
-        result: {
-          upi: false,
-          bank: "Thrissur District Co-Operative Bank",
-          city: "KODUNGALLUR",
-          ifsc: "THRS0000XXX",
-          imps: true,
-          micr: "680800002",
-          neft: true,
-          rtgs: true,
-          state: "KERALA",
-          branch: "KODUNGALLUR",
-          centre: "THRISSUR",
-          address: "MAIN ROAD, KODUNGALLUR, THRISSUR DISTRICT, KERALA 680664",
-          contact: "0480-2802244",
-          district: "THRISSUR",
-          bank_code: "THRS",
-        },
-        timestamp: "2026-10-16T12:35:00.000Z",
-      }),
-      providerMappings: {
-        create: [
-          {
-            providerId: provZoop.id,
-            providerEndpoint: "/api/v1/in/utility/ifsc/lite",
-            providerMethod: "POST",
-            priority: 1,
-            requestTransform: JSON.stringify({
-              mode: "sync",
-              data: { ifsc: "data.ifsc", consent: "data.consent", consent_text: "data.consent_text" },
-              task_id: "colladome_order_id",
-            }),
-            responseExtract: JSON.stringify({
-              result: "result",
-              upstream_task_id: "task_id",
-              upstream_group_id: "group_id",
-              upstream_request_id: "request_id",
-            }),
-          },
-        ],
-      },
-    },
-  });
+  const apiIfsc = await prisma.api.create({ data: ifscApiData(catBanking.id, provZoop.id) });
   console.log(`✅ Production Gateway API initialized: ${apiIfsc.name} (${apiIfsc.endpointPath})`);
 
   console.log("--------------------------------------------------");

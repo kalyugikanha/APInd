@@ -179,6 +179,7 @@ export default function AdminApisPage() {
     baseUrl: "",
     apiKey: "",
     apiSecret: "",
+    appId: "",
     authType: "HEADER_API_KEY",
     isActive: true,
     isSimulation: true,
@@ -218,6 +219,7 @@ export default function AdminApisPage() {
       baseUrl: p.baseUrl || "",
       apiKey: "",
       apiSecret: "",
+      appId: "",
       authType: p.authType || "HEADER_API_KEY",
       isActive: p.isActive !== false,
       isSimulation: p.isSimulation !== false,
@@ -960,6 +962,24 @@ export default function AdminApisPage() {
                   placeholder="https://live.zoop.one"
                   value={providerForm.baseUrl}
                   onChange={(e) => setProviderForm({ ...providerForm, baseUrl: e.target.value })}
+                  className="w-full text-xs font-mono border border-neutral-300 rounded-lg p-2.5 focus:outline-none focus:border-neutral-500"
+                />
+              </div>
+
+              {/* App ID (Zoop app-id header) */}
+              <div>
+                <label className="block text-xs font-semibold text-neutral-700 mb-1">
+                  Provider App ID (Zoop <code>app-id</code>)
+                </label>
+                <input
+                  type="text"
+                  placeholder={
+                    selectedProvider.appIdHint && selectedProvider.appIdHint !== "Not Configured"
+                      ? `Keep existing App ID (${selectedProvider.appIdHint}) or enter new`
+                      : "Enter upstream app-id"
+                  }
+                  value={providerForm.appId}
+                  onChange={(e) => setProviderForm({ ...providerForm, appId: e.target.value })}
                   className="w-full text-xs font-mono border border-neutral-300 rounded-lg p-2.5 focus:outline-none focus:border-neutral-500"
                 />
               </div>
