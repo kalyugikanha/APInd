@@ -18,6 +18,9 @@ import {
   Key,
   ArrowRight,
   Terminal,
+  Download,
+  Play,
+  Loader2,
 } from "lucide-react";
 
 export default function ClientApiCatalogPage() {
@@ -31,6 +34,12 @@ export default function ClientApiCatalogPage() {
   // Selected API for Integration Spec modal
   const [selectedApi, setSelectedApi] = useState<any | null>(null);
   const [copiedSection, setCopiedSection] = useState<string | null>(null);
+  const [sdkLang, setSdkLang] = useState<"curl" | "node" | "python" | "php">("curl");
+
+  // Interactive Live Test state inside modal
+  const [testIfsc, setTestIfsc] = useState("SBIN0000001");
+  const [testRunning, setTestRunning] = useState(false);
+  const [testResult, setTestResult] = useState<{ status: number; latency: number; data: any } | null>(null);
 
   // Subscribed state mapping (API ID -> boolean)
   const [subscribedMap, setSubscribedMap] = useState<Record<string, boolean>>({});
@@ -156,6 +165,221 @@ export default function ClientApiCatalogPage() {
   // Current origin base URL
   const baseUrl = typeof window !== "undefined" ? window.location.origin : "https://apind.onrender.com";
 
+  // Multi-language SDK snippets for selected API
+  const sdkSnippets = (() => {
+    const ep = selectedApi?.endpointPath || "/ifsc-verification/v1";
+    const method = selectedApi?.httpMethod || "POST";
+    const compactBody = requestSampleJson.replace(/\n/g, "");
+
+    const curl = `# 1. Primary Query Param Authentication
+curl -X ${method} "${baseUrl}${ep}?api_key=${apiKeyHint}" \\
+  -H "Content-Type: application/json" \\
+  -d '${compactBody}'
+
+# 2. Alternative Header Authentication
+curl -X ${method} "${baseUrl}${ep}" \\
+  -H "x-api-key: ${apiKeyHint}" \\
+  -H "Content-Type: application/json" \\
+  -d '${compactBody}'`;
+
+    const node = `// Node.js / TypeScript (Native fetch or Axios)
+const COLLADOME_BASE_URL = "${baseUrl}";
+const COLLADOME_API_KEY = process.env.COLLADOME_API_KEY || "${apiKeyHint}";
+
+export async function verifyIfsc(ifscCode, clientOrderId) {
+  const url = \`\${COLLADOME_BASE_URL}${ep}?api_key=\${encodeURIComponent(COLLADOME_API_KEY)}\`;
+
+  const response = await fetch(url, {
+    method: "${method}",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      mode: "sync",
+      data: {
+        ifsc: ifscCode.trim().toUpperCase(),
+        consent: "Y",
+        consent_text: "I hear by declare my consent agreement for fetching my information via Colladome API",
+      },
+      task_id: clientOrderId || \`order_\${Date.now()}\`,
+    }),
+  });
+
+  const payload = await response.json();
+  if (!payload.success || payload.response_code !== "100") {
+    throw new Error(\`Colladome Error [\${payload.response_code}]: \${payload.response_message}\`);
+  }
+  return payload; // { colladome_order_id, client_order_id, result: { bank, branch, city, micr, upi, ... } }
+}`;
+
+    const python = `# Python 3 (requests)
+import os
+import requests
+
+COLLADOME_BASE_URL = "${baseUrl}"
+COLLADOME_API_KEY = os.getenv("COLLADOME_API_KEY", "${apiKeyHint}")
+
+def verify_ifsc(ifsc_code: str, client_order_id: str = "order-001") -> dict:
+    url = f"{COLLADOME_BASE_URL}${ep}"
+    payload = {
+        "mode": "sync",
+        "data": {
+            "ifsc": ifsc_code.strip().upper(),
+            "consent": "Y",
+            "consent_text": "I hear by declare my consent agreement for fetching my information via Colladome API",
+        },
+        "task_id": client_order_id,
+    }
+    res = requests.post(url, params={"api_key": COLLADOME_API_KEY}, json=payload, timeout=10)
+    data = res.json()
+    if not data.get("success") or data.get("response_code") != "100":
+        raise ValueError(f"Colladome Error [{data.get('response_code')}]: {data.get('response_message')}")
+    return data`;
+
+    const php = `<?php
+// PHP cURL Integration
+$apiKey = getenv('COLLADOME_API_KEY') ?: '${apiKeyHint}';
+$url = '${baseUrl}${ep}?api_key=' . urlencode($apiKey);
+
+$payload = json_encode([
+    'mode' => 'sync',
+    'data' => [
+        'ifsc' => 'THRS0000XXX',
+        'consent' => 'Y',
+        'consent_text' => 'I hear by declare my consent agreement for fetching my information via Colladome API',
+    ],
+    'task_id' => 'client-order-' . time(),
+]);
+
+$ch = curl_init($url);
+curl_setopt_array($ch, [
+    CURLOPT_POST => true,
+    CURLOPT_RETURNTRANSFER => true,
+    CURLOPT_HTTPHEADER => ['Content-Type: application/json'],
+    CURLOPT_POSTFIELDS => $payload,
+    CURLOPT_TIMEOUT => 10,
+]);
+
+$response = curl_exec($ch);
+curl_close($ch);
+$data = json_decode($response, true);
+print_r($data);`;
+
+    return { curl, node, python, php };
+  })();
+
+  // Run interactive live test hit from inside the spec modal
+  const handleRunLiveTest = async () => {
+    if (!selectedApi) return;
+    setTestRunning(true);
+    setTestResult(null);
+    try {
+      const res = await fetch("/api/internal/client/playground/run", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          endpointPath: selectedApi.endpointPath,
+          body: {
+            mode: "sync",
+            data: {
+              ifsc: testIfsc.trim().toUpperCase(),
+              consent: "Y",
+              consent_text: "I hear by declare my consent agreement for fetching my information via Colladome API",
+            },
+            task_id: `live_test_${Date.now()}`,
+          },
+        }),
+      });
+      const json = await res.json();
+      setTestResult({
+        status: json.status || res.status,
+        latency: json.latency || 0,
+        data: json.result || json,
+      });
+    } catch (err: any) {
+      setTestResult({
+        status: 500,
+        latency: 0,
+        data: { error: err.message || "Test hit failed" },
+      });
+    } finally {
+      setTestRunning(false);
+    }
+  };
+
+  // Generate & download Postman Collection v2.1 JSON
+  const handleDownloadPostman = () => {
+    const collection = {
+      info: {
+        _postman_id: "c011ad0m-e001-4000-8000-ifscgateway01",
+        name: "Colladome Enterprise API Gateway (v2.1)",
+        description:
+          "Official Colladome API Collection with Query Parameter Authentication (?api_key=...), Zoop IFSC Verification Lite Morpher, and automated response assertions.",
+        schema: "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+      },
+      variable: [
+        { key: "baseUrl", value: baseUrl, type: "string" },
+        { key: "apiKey", value: apiKeyHint, type: "string" },
+      ],
+      item: (apis.length > 0 ? apis : [{ name: "IFSC Code Verification", endpointPath: "/ifsc-verification/v1", httpMethod: "POST" }]).map(
+        (api: any) => ({
+          name: `${api.name} (Primary Query Param Auth)`,
+          event: [
+            {
+              listen: "test",
+              script: {
+                type: "text/javascript",
+                exec: [
+                  'pm.test("HTTP 200 & Colladome response_code 100", function () {',
+                  "    pm.response.to.have.status(200);",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.success).to.eql(true);",
+                  '    pm.expect(json.response_code).to.eql("100");',
+                  "    pm.expect(json.colladome_order_id).to.be.a('string');",
+                  "});",
+                ],
+              },
+            },
+          ],
+          request: {
+            method: api.httpMethod || "POST",
+            header: [{ key: "Content-Type", value: "application/json" }],
+            body: {
+              mode: "raw",
+              raw: JSON.stringify(
+                {
+                  mode: "sync",
+                  data: {
+                    ifsc: "SBIN0000001",
+                    consent: "Y",
+                    consent_text: "I hear by declare my consent agreement for fetching my information via Colladome API",
+                  },
+                  task_id: "client-order-0001",
+                },
+                null,
+                2
+              ),
+            },
+            url: {
+              raw: `{{baseUrl}}${api.endpointPath}?api_key={{apiKey}}`,
+              host: ["{{baseUrl}}"],
+              path: api.endpointPath.replace(/^\/+/, "").split("/"),
+              query: [{ key: "api_key", value: "{{apiKey}}" }],
+            },
+          },
+        })
+      ),
+    };
+
+    const blob = new Blob([JSON.stringify(collection, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "Colladome_API_Gateway.postman_collection.json";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
   return (
     <div className="p-6 lg:p-8 space-y-6 max-w-7xl mx-auto">
       {/* Top Header */}
@@ -167,13 +391,23 @@ export default function ClientApiCatalogPage() {
           </p>
         </div>
 
-        <Link
-          href="/dashboard/keys"
-          className="flex items-center gap-1.5 px-3.5 py-2 bg-slate-950 hover:bg-black text-white rounded-lg text-xs font-semibold shadow-sm transition"
-        >
-          <Key className="w-3.5 h-3.5" />
-          <span>View API Credentials</span>
-        </Link>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={handleDownloadPostman}
+            className="flex items-center gap-1.5 px-3.5 py-2 bg-white hover:bg-slate-50 text-slate-800 border border-slate-300 rounded-lg text-xs font-semibold shadow-sm transition"
+          >
+            <Download className="w-3.5 h-3.5" />
+            <span>Download Postman Collection</span>
+          </button>
+          <Link
+            href="/dashboard/keys"
+            className="flex items-center gap-1.5 px-3.5 py-2 bg-slate-950 hover:bg-black text-white rounded-lg text-xs font-semibold shadow-sm transition"
+          >
+            <Key className="w-3.5 h-3.5" />
+            <span>View API Credentials</span>
+          </Link>
+        </div>
       </div>
 
       {/* Filter and Search Bar */}
@@ -456,45 +690,198 @@ export default function ClientApiCatalogPage() {
                 </div>
               </div>
 
-              {/* 1-Click Copy cURL */}
-              <div className="space-y-1.5">
-                <div className="flex items-center justify-between font-bold text-slate-900 text-xs">
-                  <span className="flex items-center gap-1.5">
+              {/* Multi-Language SDK Snippets (cURL, Node.js, Python, PHP) */}
+              <div className="space-y-2">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="flex items-center gap-1.5 font-bold text-slate-900 text-xs">
                     <Terminal className="w-3.5 h-3.5" />
-                    <span>Copy-Paste cURL Snippet</span>
+                    <span>Integration Code Snippets</span>
                   </span>
+                  <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-lg">
+                    {(
+                      [
+                        { id: "curl", label: "cURL" },
+                        { id: "node", label: "Node.js / TS" },
+                        { id: "python", label: "Python" },
+                        { id: "php", label: "PHP" },
+                      ] as const
+                    ).map((t) => (
+                      <button
+                        key={t.id}
+                        type="button"
+                        onClick={() => setSdkLang(t.id)}
+                        className={`px-2.5 py-1 rounded-md text-[11px] font-bold transition ${
+                          sdkLang === t.id ? "bg-slate-950 text-white shadow-sm" : "text-slate-600 hover:text-slate-900"
+                        }`}
+                      >
+                        {t.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="relative">
                   <button
-                    onClick={() => {
-                      const curlCode = `curl -X ${selectedApi.httpMethod} "${baseUrl}${selectedApi.endpointPath}?api_key=${apiKeyHint}" \\\n  -H "Content-Type: application/json" \\\n  -d '${requestSampleJson.replace(/\n/g, "")}'`;
-                      handleCopy(curlCode, "curl");
-                    }}
-                    className="text-blue-600 hover:text-blue-700 font-bold flex items-center gap-1 text-[11px]"
+                    type="button"
+                    onClick={() => handleCopy(sdkSnippets[sdkLang], "sdk")}
+                    className="absolute right-3 top-3 px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold flex items-center gap-1 text-[10px] border border-slate-700 transition"
                   >
-                    {copiedSection === "curl" ? <Check className="w-3 h-3 text-emerald-600" /> : <Copy className="w-3 h-3" />}
-                    <span>{copiedSection === "curl" ? "Copied cURL Command" : "Copy cURL"}</span>
+                    {copiedSection === "sdk" ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+                    <span>{copiedSection === "sdk" ? "Copied Snippet" : "Copy Code"}</span>
+                  </button>
+                  <pre className="p-3.5 pt-9 bg-slate-900 text-slate-100 rounded-xl font-mono text-[11px] overflow-x-auto border border-slate-800 leading-relaxed select-all">
+                    {sdkSnippets[sdkLang]}
+                  </pre>
+                </div>
+              </div>
+
+              {/* Interactive 1-Click Live Test Runner */}
+              <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <div className="font-bold text-slate-900 text-xs flex items-center gap-1.5">
+                      <Play className="w-3.5 h-3.5 text-emerald-600" />
+                      <span>Interactive 1-Click Live Test Runner</span>
+                    </div>
+                    <p className="text-[11px] text-slate-500">
+                      Execute a real gateway verification hit right from your browser (Sandbox free session)
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    {["SBIN0000001", "HDFC0000001", "ICIC0000001", "THRS0000XXX"].map((code) => (
+                      <button
+                        key={code}
+                        type="button"
+                        onClick={() => setTestIfsc(code)}
+                        className={`px-2 py-0.5 rounded font-mono text-[10px] font-bold border transition ${
+                          testIfsc === code
+                            ? "bg-slate-900 text-white border-slate-900"
+                            : "bg-white text-slate-600 border-slate-200 hover:border-slate-400"
+                        }`}
+                      >
+                        {code}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    value={testIfsc}
+                    onChange={(e) => setTestIfsc(e.target.value.toUpperCase())}
+                    maxLength={11}
+                    placeholder="Enter 11-char IFSC (e.g. SBIN0000001)"
+                    className="flex-1 px-3 py-2 bg-white border border-slate-300 rounded-lg font-mono text-xs uppercase font-bold text-slate-900 focus:outline-none focus:border-slate-900"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleRunLiveTest}
+                    disabled={testRunning}
+                    className="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs flex items-center gap-1.5 shadow-sm transition disabled:opacity-60"
+                  >
+                    {testRunning ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Play className="w-3.5 h-3.5" />}
+                    <span>{testRunning ? "Verifying..." : "Execute Test Hit"}</span>
                   </button>
                 </div>
-                <pre className="p-3 bg-slate-900 text-slate-100 rounded-xl font-mono text-[11px] overflow-x-auto border border-slate-800 leading-relaxed select-all">
-{`# 1. Primary Query Param Authentication
-curl -X ${selectedApi.httpMethod} "${baseUrl}${selectedApi.endpointPath}?api_key=${apiKeyHint}" \\
-  -H "Content-Type: application/json" \\
-  -d '${requestSampleJson.replace(/\n/g, "")}'
 
-# 2. Alternative Header Authentication
-curl -X ${selectedApi.httpMethod} "${baseUrl}${selectedApi.endpointPath}" \\
-  -H "x-api-key: ${apiKeyHint}" \\
-  -H "Content-Type: application/json" \\
-  -d '${requestSampleJson.replace(/\n/g, "")}'`}
-                </pre>
+                {testResult && (
+                  <div className="space-y-1.5 pt-1">
+                    <div className="flex items-center justify-between text-[11px] font-mono">
+                      <span
+                        className={`px-2 py-0.5 rounded font-bold ${
+                          testResult.status === 200
+                            ? "bg-emerald-100 text-emerald-800"
+                            : "bg-rose-100 text-rose-800"
+                        }`}
+                      >
+                        HTTP {testResult.status} • response_code: {testResult.data?.response_code || "-"}
+                      </span>
+                      <span className="text-slate-500">Latency: {testResult.latency} ms</span>
+                    </div>
+                    <pre className="p-3 bg-slate-950 text-emerald-300 rounded-lg font-mono text-[11px] overflow-x-auto max-h-56 border border-slate-800">
+                      {JSON.stringify(testResult.data, null, 2)}
+                    </pre>
+                  </div>
+                )}
+              </div>
+
+              {/* Standardized Colladome Error Codes Reference */}
+              <div className="space-y-2">
+                <div className="font-bold text-slate-900 text-xs">Standardized Colladome Response & Error Codes</div>
+                <div className="border border-slate-200 rounded-xl overflow-hidden">
+                  <table className="w-full text-left text-[11px]">
+                    <thead className="bg-slate-50 border-b border-slate-200 text-slate-600 font-bold uppercase text-[10px]">
+                      <tr>
+                        <th className="py-2 px-3">response_code</th>
+                        <th className="py-2 px-3">HTTP</th>
+                        <th className="py-2 px-3">Error Code</th>
+                        <th className="py-2 px-3">Meaning & Action</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 font-mono">
+                      <tr>
+                        <td className="py-1.5 px-3 font-bold text-emerald-700">100</td>
+                        <td className="py-1.5 px-3">200</td>
+                        <td className="py-1.5 px-3">SUCCESS</td>
+                        <td className="py-1.5 px-3 font-sans text-slate-600">Valid authentication & verified result returned</td>
+                      </tr>
+                      <tr>
+                        <td className="py-1.5 px-3 font-bold text-rose-700">101</td>
+                        <td className="py-1.5 px-3">401</td>
+                        <td className="py-1.5 px-3">AUTH_INVALID_API_KEY</td>
+                        <td className="py-1.5 px-3 font-sans text-slate-600">Missing or invalid API key in ?api_key= or x-api-key</td>
+                      </tr>
+                      <tr>
+                        <td className="py-1.5 px-3 font-bold text-rose-700">102</td>
+                        <td className="py-1.5 px-3">403</td>
+                        <td className="py-1.5 px-3">SECURITY_IP_NOT_WHITELISTED</td>
+                        <td className="py-1.5 px-3 font-sans text-slate-600">Caller server IP is not in your IP Whitelist</td>
+                      </tr>
+                      <tr>
+                        <td className="py-1.5 px-3 font-bold text-amber-700">103</td>
+                        <td className="py-1.5 px-3">402</td>
+                        <td className="py-1.5 px-3">BILLING_INSUFFICIENT_WALLET_BALANCE</td>
+                        <td className="py-1.5 px-3 font-sans text-slate-600">Prepaid wallet balance below per-hit rate</td>
+                      </tr>
+                      <tr>
+                        <td className="py-1.5 px-3 font-bold text-rose-700">104</td>
+                        <td className="py-1.5 px-3">400</td>
+                        <td className="py-1.5 px-3">VALIDATION_INVALID_IFSC</td>
+                        <td className="py-1.5 px-3 font-sans text-slate-600">IFSC format invalid (must be 11-char alphanumeric)</td>
+                      </tr>
+                      <tr>
+                        <td className="py-1.5 px-3 font-bold text-rose-700">105</td>
+                        <td className="py-1.5 px-3">502</td>
+                        <td className="py-1.5 px-3">PROVIDER_UPSTREAM_ERROR</td>
+                        <td className="py-1.5 px-3 font-sans text-slate-600">Upstream banking network timeout or IFSC not found</td>
+                      </tr>
+                      <tr>
+                        <td className="py-1.5 px-3 font-bold text-amber-700">429</td>
+                        <td className="py-1.5 px-3">429</td>
+                        <td className="py-1.5 px-3">RATE_LIMIT_EXCEEDED</td>
+                        <td className="py-1.5 px-3 font-sans text-slate-600">RPM limit exceeded; respect retry-after header</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
               </div>
             </div>
 
             {/* Modal Footer */}
-            <div className="p-4 border-t border-slate-200 bg-slate-50 flex items-center justify-between">
+            <div className="p-4 border-t border-slate-200 bg-slate-50 flex flex-wrap items-center justify-between gap-2">
               <div className="text-xs font-semibold text-slate-600">
-                Rate: <strong className="text-slate-900">₹{(selectedApi.defaultSellPrice || 2.5).toFixed(2)}</strong> per hit
+                Rate: <strong className="text-slate-900">₹{(selectedApi.defaultSellPrice || 1.2).toFixed(2)}</strong> per hit
               </div>
               <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleDownloadPostman}
+                  className="px-3.5 py-2 rounded-lg bg-slate-900 hover:bg-black text-white font-semibold text-xs flex items-center gap-1.5 transition"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  <span>Download Postman Collection (v2.1)</span>
+                </button>
                 <button
                   type="button"
                   onClick={() => setSelectedApi(null)}

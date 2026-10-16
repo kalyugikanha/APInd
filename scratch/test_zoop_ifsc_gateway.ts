@@ -185,6 +185,17 @@ async function runTests() {
     console.error("❌ TEST 4 FAILED: Audit log values mismatch", latestLog);
   }
 
+  const latestBankReport = await db.bankReport.findFirst({
+    where: { userId: user.id, ifscCode: "THRS0000XXX" },
+  });
+  if (latestBankReport && latestBankReport.status === "VERIFIED") {
+    console.log(
+      `✅ TEST 4B PASSED: Bank/IFSC Report record created (${latestBankReport.ifscCode} -> ${latestBankReport.nameAtBank})`
+    );
+  } else {
+    console.error("❌ TEST 4B FAILED: BankReport not found", latestBankReport);
+  }
+
   // TEST 5: Insufficient Balance Error (Expect 103 error)
   console.log("\n--- TEST 5: Insufficient Balance (Expect 103 error) ---");
   await db.wallet.update({ where: { userId: user.id }, data: { balance: 0.2 } }); // Less than ₹1.20
@@ -227,6 +238,8 @@ async function runTests() {
   }
 
   // Clean up test client with cascading deletes
+  await db.bankReport.deleteMany({ where: { userId: user.id } });
+  await db.panReport.deleteMany({ where: { userId: user.id } });
   await db.apiLog.deleteMany({ where: { userId: user.id } });
   await db.walletTransaction.deleteMany({ where: { wallet: { userId: user.id } } });
   await db.apiKey.deleteMany({ where: { userId: user.id } });

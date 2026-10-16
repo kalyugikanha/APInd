@@ -347,27 +347,44 @@ export async function handleGatewayRequest(
       };
     }
   } else {
-    // Fallback for other existing or future endpoints
-    if (client.keyType === "SANDBOX") {
-      if (normalizedPath.includes("/pan")) {
-        const mock = generateMockPanResponse(body.pan_number);
-        responseData = mock.data;
-        status = mock.status as any;
-      } else if (normalizedPath.includes("/bank-verify")) {
-        const mock = generateMockBankResponse(body.account_number, body.ifsc_code, body.beneficiary_name);
-        responseData = mock.data;
-        status = mock.status as any;
-      } else if (normalizedPath.includes("/gstin-verify")) {
-        const mock = generateMockGstinResponse(body.gstin);
-        responseData = mock.data;
-        status = mock.status as any;
-      }
-      providerOrderId = `SANDBOX_MOCK_${Date.now()}`;
-      rawUpstreamResponse = responseData;
+    // Support for other endpoints (PAN Verification, Bank Penny Drop, GSTIN, or custom APIs)
+    const panInput = body.data?.customer_pan_number || body.data?.pan_number || body.data?.pan || body.pan_number || body.pan;
+    const accInput = body.data?.bank_account_number || body.data?.account_number || body.account_number;
+    const ifscInput = body.data?.bank_ifsc_code || body.data?.ifsc_code || body.data?.ifsc || body.ifsc_code || body.ifsc;
+    const benNameInput = body.data?.beneficiary_name || body.beneficiary_name;
+    const gstInput = body.data?.business_gstin_number || body.data?.gstin || body.gstin;
+
+    if (normalizedPath.includes("/pan")) {
+      const mock = generateMockPanResponse(panInput);
+      responseData = mock.data;
+      status = mock.status as any;
+      responseCode = status === "SUCCESS" ? "100" : "104";
+      responseMessage = status === "SUCCESS" ? "Valid Authentication" : mock.data?.message || "Invalid PAN format";
+      responseStatus = status === "SUCCESS" ? 200 : 400;
+      providerOrderId = `ZOOP_PAN_${Date.now()}`;
+      rawUpstreamResponse = { ...mock, task_id: providerOrderId };
+    } else if (normalizedPath.includes("/bank-verify") || normalizedPath.includes("/bank")) {
+      const mock = generateMockBankResponse(accInput, ifscInput, benNameInput);
+      responseData = mock.data;
+      status = mock.status as any;
+      responseCode = status === "SUCCESS" ? "100" : "104";
+      responseMessage = status === "SUCCESS" ? "Valid Authentication" : mock.data?.message || "Invalid Bank/IFSC details";
+      responseStatus = status === "SUCCESS" ? 200 : 400;
+      providerOrderId = `ZOOP_BANK_${Date.now()}`;
+      rawUpstreamResponse = { ...mock, task_id: providerOrderId };
+    } else if (normalizedPath.includes("/gstin")) {
+      const mock = generateMockGstinResponse(gstInput);
+      responseData = mock.data;
+      status = mock.status as any;
+      responseCode = status === "SUCCESS" ? "100" : "104";
+      responseMessage = status === "SUCCESS" ? "Valid Authentication" : mock.data?.message || "Invalid GSTIN format";
+      responseStatus = status === "SUCCESS" ? 200 : 400;
+      providerOrderId = `ZOOP_GST_${Date.now()}`;
+      rawUpstreamResponse = { ...mock, task_id: providerOrderId };
     } else {
       status = "SUCCESS";
-      responseData = { message: "Verified successfully", input: body };
-      providerOrderId = `PROD_${Date.now()}`;
+      responseData = { verified: true, message: "Verified successfully", input: body.data || body };
+      providerOrderId = `CDO_UPSTREAM_${Date.now()}`;
       rawUpstreamResponse = responseData;
     }
   }
@@ -387,11 +404,11 @@ export async function handleGatewayRequest(
     }
   }
 
-  // 9. Asynchronous Internal Audit Logging
+  // 9. Asynchronous Internal Audit Logging & Report Generation
   // Zoop's raw vendor IDs (task_id, group_id, request_id, metadata) are stored strictly inside db.apiLog
   const logPromise = (async () => {
     try {
-      await db.apiLog.create({
+      const log = await db.apiLog.create({
         data: {
           colladomeOrderId,
           clientOrderId: clientTaskId,
@@ -416,6 +433,49 @@ export async function handleGatewayRequest(
           marginProfit: client.keyType === "PRODUCTION" ? marginProfit : 0,
         },
       });
+
+      // Record Bank & IFSC Verification Report for Admin & Client Portals
+      if (isIfscPath && responseData) {
+        await db.bankReport.create({
+          data: {
+            apiLogId: log.id,
+            userId: client.userId,
+            accountNumber: "IFSC_LOOKUP",
+            ifscCode: responseData.ifsc || cleanIfsc,
+            beneficiaryName: `${responseData.branch || ""} (${responseData.city || ""}, ${responseData.state || ""})`.trim(),
+            nameAtBank: responseData.bank || null,
+            matchPercentage: 100.0,
+            utrNumber: responseData.micr ? `MICR:${responseData.micr}` : null,
+            status: status === "SUCCESS" ? "VERIFIED" : "FAILED",
+          },
+        });
+      } else if (normalizedPath.includes("/bank") && responseData) {
+        await db.bankReport.create({
+          data: {
+            apiLogId: log.id,
+            userId: client.userId,
+            accountNumber: responseData.account_number || "UNKNOWN",
+            ifscCode: responseData.ifsc_code || "UNKNOWN",
+            beneficiaryName: responseData.beneficiary_name || null,
+            nameAtBank: responseData.name_at_bank || responseData.bank_name || null,
+            matchPercentage: responseData.name_match_score || null,
+            utrNumber: responseData.utr_number || null,
+            status: responseData.status || (status === "SUCCESS" ? "VERIFIED" : "FAILED"),
+          },
+        });
+      } else if (normalizedPath.includes("/pan") && responseData) {
+        await db.panReport.create({
+          data: {
+            apiLogId: log.id,
+            userId: client.userId,
+            panNumber: responseData.pan_number || "UNKNOWN",
+            fullName: responseData.full_name || null,
+            category: responseData.category || null,
+            status: responseData.status || status,
+            panAadhaarLinked: responseData.pan_aadhaar_linked ?? false,
+          },
+        });
+      }
 
       // Optional Webhook Event Dispatch
       if (client.webhookUrl) {

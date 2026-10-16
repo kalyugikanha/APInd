@@ -67,9 +67,9 @@ export default function BankReportsPage() {
       {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Bank Verification Report</h1>
+          <h1 className="text-2xl font-bold text-slate-900 tracking-tight">IFSC & Bank Verification Report</h1>
           <p className="text-xs text-slate-500 mt-1">
-            Real-time Penny Drop & IMPS verification audit logs with name match scores and bank UTRs
+            Real-time IFSC branch lookups, Penny Drop & IMPS verification audit logs with bank details and MICR/UTR
           </p>
         </div>
 
@@ -99,7 +99,7 @@ export default function BankReportsPage() {
             <Search className="w-4 h-4 absolute left-3 top-2.5 text-slate-400" />
             <input
               type="text"
-              placeholder="Search by Bank Account..."
+              placeholder="Search by IFSC_LOOKUP or Account..."
               value={accountFilter}
               onChange={(e) => setAccountFilter(e.target.value)}
               className="w-full pl-9 pr-3 py-2 text-xs font-mono border border-slate-300 rounded-lg focus:outline-none focus:border-blue-500"
@@ -110,7 +110,7 @@ export default function BankReportsPage() {
         <div className="flex items-center gap-2 flex-1 max-w-sm">
           <input
             type="text"
-            placeholder="Search by IFSC Code (e.g. HDFC...)"
+            placeholder="Search by IFSC Code (e.g. SBIN0000001, THRS0000XXX)..."
             value={ifscFilter}
             onChange={(e) => setIfscFilter(e.target.value)}
             className="w-full px-3 py-2 text-xs uppercase font-mono border border-slate-300 rounded-lg focus:outline-none focus:border-blue-500"
@@ -133,12 +133,12 @@ export default function BankReportsPage() {
               <tr>
                 <th className="p-3">Order ID</th>
                 <th className="p-3">Client</th>
-                <th className="p-3">Account Number</th>
+                <th className="p-3">Type / Account</th>
                 <th className="p-3">IFSC Code</th>
-                <th className="p-3">Beneficiary Provided</th>
-                <th className="p-3">Name at Bank</th>
-                <th className="p-3">Match Score</th>
-                <th className="p-3">Bank UTR</th>
+                <th className="p-3">Bank Name</th>
+                <th className="p-3">Branch & City / Beneficiary</th>
+                <th className="p-3">Match %</th>
+                <th className="p-3">MICR / Bank UTR</th>
                 <th className="p-3">Status</th>
                 <th className="p-3">Date</th>
               </tr>
@@ -152,10 +152,18 @@ export default function BankReportsPage() {
                       <div className="font-semibold text-slate-900">{r.clientName}</div>
                       <div className="text-[10px] text-slate-400 font-mono">{r.clientCode}</div>
                     </td>
-                    <td className="p-3 font-mono font-bold text-slate-900">{r.accountNumber}</td>
+                    <td className="p-3 font-mono font-bold text-slate-900">
+                      {r.accountNumber === "IFSC_LOOKUP" ? (
+                        <span className="px-2 py-0.5 rounded bg-slate-100 text-slate-800 text-[10px] font-bold">
+                          IFSC LOOKUP
+                        </span>
+                      ) : (
+                        r.accountNumber
+                      )}
+                    </td>
                     <td className="p-3 font-mono uppercase text-blue-600 font-semibold">{r.ifscCode}</td>
-                    <td className="p-3 text-slate-700">{r.beneficiaryName || "-"}</td>
                     <td className="p-3 font-semibold text-slate-900">{r.nameAtBank || "-"}</td>
+                    <td className="p-3 text-slate-700">{r.beneficiaryName || "-"}</td>
                     <td className="p-3 font-bold text-emerald-600">{r.matchPercentage ? `${r.matchPercentage}%` : "-"}</td>
                     <td className="p-3 font-mono text-[11px] text-slate-500">{r.utrNumber || "-"}</td>
                     <td className="p-3">
