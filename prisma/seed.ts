@@ -23,7 +23,7 @@ async function main() {
   console.log("🌱 Initializing Clean Production Colladome Platform...");
   console.log("--------------------------------------------------");
 
-  // Clean old sample/dummy data to ensure pristine production state
+  // Clean old sample/dummy data to ensure pristine state
   await prisma.bankReport.deleteMany();
   await prisma.panReport.deleteMany();
   await prisma.apiLog.deleteMany();
@@ -79,22 +79,22 @@ async function main() {
   console.log(`✅ Super Admin created: ${admin.email}`);
 
   // 2. Core API Categories
+  const catBanking = await prisma.apiCategory.create({
+    data: {
+      name: "Banking & Financials",
+      slug: "banking-financials",
+      description: "Instant IFSC bank branch lookups, penny drop account verification, and UPI validation.",
+      icon: "Building2",
+      sortOrder: 1,
+    },
+  });
+
   const catIdentity = await prisma.apiCategory.create({
     data: {
       name: "Identity Verification",
       slug: "identity-verification",
       description: "Verify Indian identity documents including PAN, Aadhaar, Voter ID, and Passport.",
       icon: "ShieldCheck",
-      sortOrder: 1,
-    },
-  });
-
-  const catBanking = await prisma.apiCategory.create({
-    data: {
-      name: "Banking & Financials",
-      slug: "banking-financials",
-      description: "Instant penny drop bank account verification, IFSC lookups, and UPI VPA validation.",
-      icon: "Building2",
       sortOrder: 2,
     },
   });
@@ -115,9 +115,15 @@ async function main() {
     data: {
       name: "Zoop.one",
       code: "ZOOP",
-      baseUrl: "https://api.zoop.one",
+      baseUrl: "https://test.zoop.one",
       authType: "HEADER_API_KEY",
-      credentialsEnc: encrypt(JSON.stringify({ apiKey: "", appId: "", isSimulation: true })),
+      credentialsEnc: encrypt(
+        JSON.stringify({
+          apiKey: process.env.ZOOP_API_KEY || "",
+          appId: process.env.ZOOP_APP_ID || "",
+          isSimulation: !process.env.ZOOP_API_KEY,
+        })
+      ),
       isActive: true,
     },
   });
@@ -154,144 +160,114 @@ async function main() {
       isActive: true,
     },
   });
-  console.log("✅ Providers initialized (Zoop, IDFY, Decentro, Surpass).");
+  console.log("✅ Upstream providers initialized (Zoop.one, IDFY, Decentro, Surpass).");
 
-  // 4. Production Gateway APIs
-  // API 1: PAN Detailed Verification
-  const apiPan = await prisma.api.create({
+  // 4. Official Real Gateway API: IFSC Code Verification (Zoop Lite API Morpher)
+  // Dummy APIs (PAN, Bank Penny Drop, GSTIN) are completely removed!
+  const apiIfsc = await prisma.api.create({
     data: {
-      categoryId: catIdentity.id,
-      name: "PAN Detailed Verification",
-      slug: "pan-verification",
-      endpointPath: "/v1/verification/pan",
+      categoryId: catBanking.id,
+      name: "IFSC Code Verification",
+      slug: "ifsc-verification",
+      endpointPath: "/ifsc-verification/v1",
       httpMethod: "POST",
-      description: "Instantly verifies any Indian Permanent Account Number (PAN) with Income Tax Department records. Returns taxpayer name, category, status, and Aadhaar linking status.",
-      useCase: "KYC onboarding for fintechs, lending apps, stock brokers, and neo-banks.",
+      description:
+        "Validates 11-character Indian Financial System Code (IFSC) and returns real-time verified bank branch details including bank name, branch address, contact, MICR, UPI, NEFT, IMPS, and RTGS support status.",
+      useCase: "Bank branch lookup, penny drop pre-validation, IMPS/NEFT routing, and vendor payout onboarding.",
       status: "ACTIVE",
-      defaultCostPrice: 1.80,
-      defaultSellPrice: 2.50,
+      defaultCostPrice: 0.50,
+      defaultSellPrice: 1.20,
       requestSchema: JSON.stringify({
-        pan_number: { type: "string", required: true, example: "ABCDE1234F", description: "10-character alphanumeric PAN" },
-        consent: { type: "string", required: true, example: "Y", description: "User consent (Y/N)" },
+        ifsc: {
+          type: "string",
+          required: true,
+          example: "THRS0000XXX",
+          description: "11-character alphanumeric Indian bank IFSC code",
+        },
+        mode: {
+          type: "string",
+          required: false,
+          example: "sync",
+          description: "Execution mode ('sync')",
+        },
+        consent: {
+          type: "string",
+          required: false,
+          example: "Y",
+          description: "User consent (Y/N)",
+        },
+        consent_text: {
+          type: "string",
+          required: false,
+          example: "I hear by declare my consent agreement for fetching my information via Colladome API",
+          description: "Consent declaration text",
+        },
+        task_id: {
+          type: "string",
+          required: false,
+          example: "f26eb21e-4c35-4491-b2d5-41fa0e545a34",
+          description: "Optional client order tracking UUID",
+        },
       }),
       responseSchema: JSON.stringify({
-        pan_number: "ABCDE1234F",
-        full_name: "TAXPAYER NAME",
-        category: "INDIVIDUAL",
-        status: "VALID",
-        pan_aadhaar_linked: true,
+        success: true,
+        response_code: "100",
+        response_message: "Valid Authentication",
+        colladome_order_id: "CDO_20261016_883291",
+        client_order_id: "f26eb21e-4c35-4491-b2d5-41fa0e545a34",
+        result: {
+          upi: false,
+          bank: "Thrissur District Co-Operative Bank",
+          city: "KODUNGALLUR",
+          ifsc: "THRS0000XXX",
+          imps: true,
+          micr: "680800002",
+          neft: true,
+          rtgs: true,
+          state: "KERALA",
+          branch: "KODUNGALLUR",
+          centre: "THRISSUR",
+          address: "MAIN ROAD, KODUNGALLUR, THRISSUR DISTRICT, KERALA 680664",
+          contact: "0480-2802244",
+          district: "THRISSUR",
+          bank_code: "THRS",
+        },
+        timestamp: "2026-10-16T12:35:00.000Z",
       }),
       providerMappings: {
         create: [
           {
             providerId: provZoop.id,
-            providerEndpoint: "/api/v1/in/identity/pan/advance",
+            providerEndpoint: "/api/v1/in/utility/ifsc/lite",
             providerMethod: "POST",
             priority: 1,
-            requestTransform: JSON.stringify({ customer_pan_number: "pan_number", consent: "consent" }),
-            responseExtract: JSON.stringify({ name: "result.user_full_name", status: "result.pan_status" }),
-          },
-          {
-            providerId: provIdfy.id,
-            providerEndpoint: "/v3/tasks/async/verify_with_source/ind_pan",
-            providerMethod: "POST",
-            priority: 2,
-            requestTransform: JSON.stringify({ id_number: "pan_number" }),
+            requestTransform: JSON.stringify({
+              mode: "sync",
+              data: { ifsc: "data.ifsc", consent: "data.consent", consent_text: "data.consent_text" },
+              task_id: "colladome_order_id",
+            }),
+            responseExtract: JSON.stringify({
+              result: "result",
+              upstream_task_id: "task_id",
+              upstream_group_id: "group_id",
+              upstream_request_id: "request_id",
+            }),
           },
         ],
       },
     },
   });
-
-  // API 2: Bank Account Penny Drop Verification
-  const apiBank = await prisma.api.create({
-    data: {
-      categoryId: catBanking.id,
-      name: "Bank Account Penny Drop Verification",
-      slug: "bank-account-verify",
-      endpointPath: "/v1/banking/bank-verify",
-      httpMethod: "POST",
-      description: "Verifies Indian bank account holder name and validity via real-time ₹1 IMPS penny-drop. Returns beneficiary name registered with the bank, UTR number, and name match score.",
-      useCase: "Payout verification, employee payroll, merchant payouts, and loan disbursements.",
-      status: "ACTIVE",
-      defaultCostPrice: 2.20,
-      defaultSellPrice: 3.50,
-      requestSchema: JSON.stringify({
-        account_number: { type: "string", required: true, example: "001201509823", description: "Bank Account Number" },
-        ifsc_code: { type: "string", required: true, example: "HDFC0000012", description: "11-character bank IFSC code" },
-        beneficiary_name: { type: "string", required: false, example: "BENEFICIARY NAME", description: "Expected name for match scoring" },
-      }),
-      responseSchema: JSON.stringify({
-        account_number: "001201509823",
-        ifsc_code: "HDFC0000012",
-        bank_name: "HDFC BANK",
-        name_at_bank: "BENEFICIARY NAME",
-        name_match_score: 99.0,
-        utr_number: "2026101599812481",
-        status: "VERIFIED",
-      }),
-      providerMappings: {
-        create: [
-          {
-            providerId: provDecentro.id,
-            providerEndpoint: "/core_banking/money_transfer/penny_drop",
-            providerMethod: "POST",
-            priority: 1,
-          },
-          {
-            providerId: provIdfy.id,
-            providerEndpoint: "/v3/tasks/async/verify_with_source/ind_bank",
-            providerMethod: "POST",
-            priority: 2,
-          },
-        ],
-      },
-    },
-  });
-
-  // API 3: GSTIN Business Verification
-  const apiGst = await prisma.api.create({
-    data: {
-      categoryId: catBusiness.id,
-      name: "GSTIN Business & Tax Verification",
-      slug: "gstin-verification",
-      endpointPath: "/v1/business/gstin-verify",
-      httpMethod: "POST",
-      description: "Validates GST Identification Number (GSTIN) directly from GST portal. Returns legal business name, trade name, taxpayer type, filing status, and principal place of business.",
-      useCase: "B2B vendor onboarding, merchant verification, and invoice financing.",
-      status: "ACTIVE",
-      defaultCostPrice: 1.50,
-      defaultSellPrice: 2.20,
-      requestSchema: JSON.stringify({
-        gstin: { type: "string", required: true, example: "27AABCC1234F1Z8" },
-      }),
-      responseSchema: JSON.stringify({
-        gstin: "27AABCC1234F1Z8",
-        legal_name: "COMPANY NAME",
-        trade_name: "BRAND NAME",
-        status: "ACTIVE",
-      }),
-      providerMappings: {
-        create: [
-          {
-            providerId: provSurpass.id,
-            providerEndpoint: "/v1/gstin/search",
-            providerMethod: "POST",
-            priority: 1,
-          },
-        ],
-      },
-    },
-  });
-  console.log("✅ Production Gateway APIs initialized (PAN, Bank Penny Drop, GSTIN).");
+  console.log(`✅ Production Gateway API initialized: ${apiIfsc.name} (${apiIfsc.endpointPath})`);
 
   console.log("--------------------------------------------------");
   console.log("✨ CLEAN PRODUCTION INITIALIZATION COMPLETE!");
   console.log("--------------------------------------------------");
   console.log("Super Admin Login: admin@colladome.com");
   console.log("Password:          Admin@123");
+  console.log("Gateway API:       POST /ifsc-verification/v1");
+  console.log("Base Cost:         ₹0.50 (Zoop Lite)");
+  console.log("Retail Sell Price: ₹1.20");
   console.log("Clients:           0 (Ready for real enterprise registrations)");
-  console.log("API Logs:          0 (Clean real-time hit stream)");
   console.log("--------------------------------------------------");
 }
 

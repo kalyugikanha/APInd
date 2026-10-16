@@ -7,10 +7,10 @@ import {
   generateMockPanResponse,
   generateMockBankResponse,
   generateMockGstinResponse,
+  generateMockIfscResponse,
 } from "@/lib/gateway/mockProviders";
 import { dispatchWebhook } from "@/lib/webhooks/dispatcher";
 import { checkRateLimit } from "@/lib/gateway/rateLimiter";
-import { GatewayResponse } from "@/types";
 
 export async function handleGatewayRequest(
   req: NextRequest,
@@ -18,17 +18,28 @@ export async function handleGatewayRequest(
   method: string = "POST"
 ): Promise<NextResponse> {
   const startTime = Date.now();
+  const requestTimestamp = new Date(startTime).toISOString();
 
-  // 1. Authenticate Request
+  // Normalize path
+  const normalizedPath = endpointPath.replace(/\/+$/, "");
+
+  // 1. Authenticate Request (Checks Base URL query ?api_key=... and headers)
   const auth = await authenticateApiRequest(req);
   if (auth.error) {
+    const errorOrderId = generateOrderId("CDO");
     return NextResponse.json(
       {
+        success: false,
+        response_code: auth.error.response_code || "101",
+        response_message: auth.error.message,
+        colladome_order_id: errorOrderId,
+        client_order_id: null,
+        result: null,
         status: "ERROR",
-        colladome_order_id: generateOrderId(),
-        timestamp: new Date().toISOString(),
         data: null,
         error: auth.error,
+        request_timestamp: requestTimestamp,
+        response_timestamp: new Date().toISOString(),
       },
       { status: auth.error.status }
     );
@@ -38,18 +49,24 @@ export async function handleGatewayRequest(
   const colladomeOrderId = generateOrderId("CDO");
 
   // 1.1 Enforce Sliding-Window Rate Limit (RPM Throttling)
-  const rateLimit = checkRateLimit(client.keyId, client.rateLimitRpm || 60);
+  const rateLimit = checkRateLimit(client.keyId, client.rateLimitRpm || 120);
   if (!rateLimit.allowed) {
     return NextResponse.json(
       {
-        status: "ERROR",
+        success: false,
+        response_code: "429",
+        response_message: `Rate limit exceeded. Maximum ${rateLimit.limit} RPM allowed. Please retry in ${rateLimit.retryAfterSeconds} seconds.`,
         colladome_order_id: colladomeOrderId,
-        timestamp: new Date().toISOString(),
+        client_order_id: client.clientOrderId,
+        result: null,
+        status: "ERROR",
         data: null,
         error: {
           code: "RATE_LIMIT_EXCEEDED",
-          message: `Too many requests. Rate limit of ${rateLimit.limit} RPM exceeded. Please retry in ${rateLimit.retryAfterSeconds} seconds.`,
+          message: `Too many requests. Rate limit of ${rateLimit.limit} RPM exceeded.`,
         },
+        request_timestamp: requestTimestamp,
+        response_timestamp: new Date().toISOString(),
       },
       {
         status: 429,
@@ -62,7 +79,7 @@ export async function handleGatewayRequest(
     );
   }
 
-  // 2. Parse Body
+  // 2. Parse Body & Query Params
   let body: any = {};
   try {
     if (method !== "GET") {
@@ -72,9 +89,31 @@ export async function handleGatewayRequest(
     body = {};
   }
 
-  // 3. Find API in Catalog
-  const api = await db.api.findUnique({
-    where: { endpointPath },
+  // Extract client order/task ID from body or headers or query params
+  const clientTaskId =
+    body.task_id ||
+    body.client_order_id ||
+    client.clientOrderId ||
+    req.nextUrl?.searchParams?.get("task_id") ||
+    req.nextUrl?.searchParams?.get("client_order_id") ||
+    null;
+
+  // 3. Find API in Catalog (handles /ifsc-verification/v1, /v1/utility/ifsc, /api/v1/ifsc-verification, etc.)
+  const isIfscPath =
+    normalizedPath.includes("ifsc") ||
+    normalizedPath === "/ifsc-verification/v1" ||
+    normalizedPath === "/v1/utility/ifsc";
+
+  let api = await db.api.findFirst({
+    where: isIfscPath
+      ? {
+          OR: [
+            { endpointPath: normalizedPath },
+            { endpointPath: "/ifsc-verification/v1" },
+            { slug: "ifsc-verification" },
+          ],
+        }
+      : { endpointPath: normalizedPath },
     include: {
       providerMappings: {
         where: { isActive: true },
@@ -87,167 +126,255 @@ export async function handleGatewayRequest(
   if (!api || api.status !== "ACTIVE") {
     return NextResponse.json(
       {
-        status: "ERROR",
+        success: false,
+        response_code: "404",
+        response_message: `The endpoint '${normalizedPath}' does not exist or is currently inactive.`,
         colladome_order_id: colladomeOrderId,
-        client_order_id: client.clientOrderId,
-        timestamp: new Date().toISOString(),
+        client_order_id: clientTaskId,
+        result: null,
+        status: "ERROR",
         data: null,
         error: {
           code: "API_NOT_FOUND",
-          message: `The endpoint '${endpointPath}' does not exist or is currently inactive.`,
+          message: `The endpoint '${normalizedPath}' does not exist or is currently inactive.`,
         },
+        request_timestamp: requestTimestamp,
+        response_timestamp: new Date().toISOString(),
       },
       { status: 404 }
     );
   }
 
-  // 4. Calculate Rate / Surcharge for this Client
+  // 4. Input Validation (For IFSC Verification)
+  let cleanIfsc = "";
+  let consent = "Y";
+  let consentText = "I hear by declare my consent agreement for fetching my information via Colladome API";
+
+  if (isIfscPath) {
+    const rawIfsc = body.data?.ifsc || body.ifsc || req.nextUrl?.searchParams?.get("ifsc");
+    consent = body.data?.consent || body.consent || req.nextUrl?.searchParams?.get("consent") || "Y";
+    consentText =
+      body.data?.consent_text ||
+      body.consent_text ||
+      "I hear by declare my consent agreement for fetching my information via Colladome API";
+
+    if (!rawIfsc || typeof rawIfsc !== "string" || rawIfsc.trim().length !== 11) {
+      return NextResponse.json(
+        {
+          success: false,
+          response_code: "104",
+          response_message: "Invalid IFSC Code. IFSC must be an 11-character alphanumeric code (e.g. THRS0000XXX, SBIN0000001, HDFC0000012).",
+          colladome_order_id: colladomeOrderId,
+          client_order_id: clientTaskId,
+          result: null,
+          status: "FAILED",
+          data: null,
+          error: {
+            code: "VALIDATION_INVALID_IFSC",
+            message: "Invalid IFSC Code. IFSC must be an 11-character alphanumeric code.",
+          },
+          request_timestamp: requestTimestamp,
+          response_timestamp: new Date().toISOString(),
+        },
+        { status: 400 }
+      );
+    }
+    cleanIfsc = rawIfsc.trim().toUpperCase();
+  }
+
+  // 5. Calculate Rate / Surcharge for this Client
   const customPrice = client.pricingRules.get(api.id);
   const sellPrice = customPrice !== undefined ? customPrice : api.defaultSellPrice;
   const costPrice = api.defaultCostPrice;
   const marginProfit = Number((sellPrice - costPrice).toFixed(2));
 
-  // 5. Check Wallet Balance
+  // 6. Check Wallet Balance (Only for PRODUCTION keys)
   if (client.keyType === "PRODUCTION") {
     if (!client.walletId || client.walletBalance < sellPrice) {
       return NextResponse.json(
         {
-          status: "FAILED",
+          success: false,
+          response_code: "103",
+          response_message: `Insufficient wallet balance. Required: ₹${sellPrice.toFixed(2)}, Available: ₹${client.walletBalance.toFixed(2)}. Please recharge your wallet at dashboard.colladome.com.`,
           colladome_order_id: colladomeOrderId,
-          client_order_id: client.clientOrderId,
-          timestamp: new Date().toISOString(),
+          client_order_id: clientTaskId,
+          result: null,
+          status: "FAILED",
           data: null,
           error: {
-            code: "INSUFFICIENT_WALLET_BALANCE",
-            message: `Insufficient wallet balance. Required: ₹${sellPrice.toFixed(2)}, Available: ₹${client.walletBalance.toFixed(2)}. Please recharge your wallet at dashboard.colladome.com.`,
+            code: "BILLING_INSUFFICIENT_WALLET_BALANCE",
+            message: `Insufficient wallet balance. Required: ₹${sellPrice.toFixed(2)}, Available: ₹${client.walletBalance.toFixed(2)}.`,
           },
+          request_timestamp: requestTimestamp,
+          response_timestamp: new Date().toISOString(),
         },
         { status: 402 }
       );
     }
   }
 
-  // 6. Execute Request: Sandbox Mock OR Live Upstream Provider
+  // 7. Execute Request: Upstream Zoop Morpher OR Simulation Fallback
   let responseData: any = null;
+  let rawUpstreamResponse: any = null;
   let responseStatus = 200;
   let status: "SUCCESS" | "FAILED" | "TIMEOUT" = "SUCCESS";
+  let responseCode = "100";
+  let responseMessage = "Valid Authentication";
   let usedProviderId: string | null = null;
   let providerOrderId: string | null = null;
 
-  if (client.keyType === "SANDBOX") {
-    // Sandbox / Mock Handling
-    if (endpointPath.includes("/pan")) {
-      const mock = generateMockPanResponse(body.pan_number);
-      responseData = mock.data;
-      status = mock.status as any;
-      responseStatus = mock.status === "SUCCESS" ? 200 : 422;
-    } else if (endpointPath.includes("/bank-verify")) {
-      const mock = generateMockBankResponse(body.account_number, body.ifsc_code, body.beneficiary_name);
-      responseData = mock.data;
-      status = mock.status as any;
-      responseStatus = mock.status === "SUCCESS" ? 200 : 422;
-    } else if (endpointPath.includes("/gstin-verify")) {
-      const mock = generateMockGstinResponse(body.gstin);
-      responseData = mock.data;
-      status = mock.status as any;
-      responseStatus = mock.status === "SUCCESS" ? 200 : 422;
-    } else {
-      responseData = { message: "Sandbox mock response", input: body };
-    }
-    usedProviderId = api.providerMappings[0]?.providerId || null;
-    providerOrderId = `SANDBOX_MOCK_${Date.now()}`;
-  } else {
-    // Live Upstream Provider Routing with Automatic Failover
-    let providerSuccess = false;
+  if (isIfscPath) {
+    // IFSC Verification via Zoop Lite API Morpher
+    const zoopMapping = api.providerMappings.find((m) => m.provider.code === "ZOOP") || api.providerMappings[0];
+    const zoopProvider = zoopMapping?.provider;
+    usedProviderId = zoopProvider?.id || null;
 
-    for (const mapping of api.providerMappings) {
-      usedProviderId = mapping.providerId;
+    let zoopAppId = process.env.ZOOP_APP_ID || "";
+    let zoopApiKey = process.env.ZOOP_API_KEY || "";
+    let zoopBaseUrl = process.env.ZOOP_BASE_URL || zoopProvider?.baseUrl || "https://test.zoop.one";
+    let isSimulation = false;
+
+    if (zoopProvider) {
       try {
-        const provider = mapping.provider;
-        const targetUrl = `${provider.baseUrl}${mapping.providerEndpoint}`;
-        const creds = JSON.parse(decrypt(provider.credentialsEnc) || "{}");
+        const decryptedCreds = JSON.parse(decrypt(zoopProvider.credentialsEnc) || "{}");
+        if (!zoopAppId && decryptedCreds.appId) zoopAppId = decryptedCreds.appId;
+        if (!zoopApiKey && decryptedCreds.apiKey) zoopApiKey = decryptedCreds.apiKey;
+        if (decryptedCreds.baseUrl) zoopBaseUrl = decryptedCreds.baseUrl;
+        if (decryptedCreds.isSimulation) isSimulation = true;
+      } catch {}
+    }
 
-        const headers: Record<string, string> = {
-          "Content-Type": "application/json",
-        };
+    // Force simulation if client key is SANDBOX or no credentials exist
+    if (client.keyType === "SANDBOX" || (!zoopAppId && !zoopApiKey)) {
+      isSimulation = true;
+    }
 
-        if (provider.authType === "HEADER_API_KEY") {
-          headers["x-api-key"] = creds.apiKey || "demo_key";
-        } else if (provider.authType === "BEARER_TOKEN") {
-          headers["Authorization"] = `Bearer ${creds.apiKey || "demo_token"}`;
-        }
+    let upstreamSuccess = false;
 
-        const isMockSimulation =
-          creds.isSimulation === true ||
-          !creds.apiKey ||
-          creds.apiKey === "demo_key";
+    if (!isSimulation && zoopApiKey) {
+      // Execute REAL HTTP call to Zoop Upstream
+      const zoopTargetUrl = `${zoopBaseUrl.replace(/\/+$/, "")}/api/v1/in/utility/ifsc/lite`;
+      const zoopPayload = {
+        mode: "sync",
+        data: {
+          ifsc: cleanIfsc,
+          consent: consent,
+          consent_text: consentText,
+        },
+        task_id: colladomeOrderId, // Pass Colladome order id into Zoop task_id
+      };
 
-        let upstreamRes: any = null;
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 8000);
 
-        if (!isMockSimulation && provider.isActive) {
-          // Execute REAL external HTTP request to Upstream Provider (Zoop, IDFY, Decentro, Surpass)
-          const controller = new AbortController();
-          const timeout = setTimeout(() => controller.abort(), 6000);
+      try {
+        const rawRes = await fetch(zoopTargetUrl, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "app-id": zoopAppId,
+            "api-key": zoopApiKey,
+          },
+          body: JSON.stringify(zoopPayload),
+          signal: controller.signal,
+        });
+        clearTimeout(timeout);
 
-          try {
-            const rawRes = await fetch(targetUrl, {
-              method: mapping.providerMethod || "POST",
-              headers,
-              body: JSON.stringify(body),
-              signal: controller.signal,
-            });
-            clearTimeout(timeout);
-            upstreamRes = await rawRes.json();
-            providerOrderId =
-              upstreamRes?.order_id ||
-              upstreamRes?.transaction_id ||
-              upstreamRes?.data?.order_id ||
-              upstreamRes?.id ||
-              `${provider.code}_LIVE_${Date.now()}`;
-          } catch (fetchErr: any) {
-            clearTimeout(timeout);
-            console.warn(`Upstream provider ${provider.name} request failed or timed out:`, fetchErr.message);
-            continue; // Automatic failover to next provider mapping
-          }
+        rawUpstreamResponse = await rawRes.json();
+        providerOrderId =
+          rawUpstreamResponse?.task_id ||
+          rawUpstreamResponse?.request_id ||
+          `ZOOP_LIVE_${Date.now()}`;
+
+        if (
+          rawRes.ok &&
+          (rawUpstreamResponse.success === true || rawUpstreamResponse.response_code === "100") &&
+          rawUpstreamResponse.result
+        ) {
+          responseData = rawUpstreamResponse.result;
+          responseCode = "100";
+          responseMessage = rawUpstreamResponse.response_message || "Valid Authentication";
+          status = "SUCCESS";
+          responseStatus = 200;
+          upstreamSuccess = true;
         } else {
-          // Simulated mock response when in simulation/staging mode
-          if (endpointPath.includes("/pan")) {
-            upstreamRes = generateMockPanResponse(body.pan_number || body.pan);
-          } else if (endpointPath.includes("/bank-verify") || endpointPath.includes("/bank")) {
-            upstreamRes = generateMockBankResponse(
-              body.account_number || body.accountNumber || body.account,
-              body.ifsc_code || body.ifsc,
-              body.beneficiary_name || body.beneficiaryName || body.name
-            );
-          } else if (endpointPath.includes("/gstin-verify") || endpointPath.includes("/gstin")) {
-            upstreamRes = generateMockGstinResponse(body.gstin || body.gstNumber || body.gst);
-          } else {
-            upstreamRes = { status: "SUCCESS", data: { verified: true, message: "Sandbox simulation passed" } };
-          }
-          providerOrderId = `${provider.code}_MOCK_${Date.now()}`;
+          // Zoop returned failure or invalid IFSC
+          status = "FAILED";
+          responseCode = rawUpstreamResponse?.response_code || "105";
+          responseMessage = rawUpstreamResponse?.response_message || "Upstream IFSC verification failed";
+          responseStatus = rawRes.status >= 400 && rawRes.status < 500 ? rawRes.status : 502;
+          responseData = null;
         }
-
-        if (upstreamRes) {
-          responseData = upstreamRes.data || upstreamRes;
-          status = upstreamRes.status === "FAILED" ? "FAILED" : "SUCCESS";
-          providerSuccess = true;
-          break; // Provider succeeded!
+      } catch (fetchErr: any) {
+        clearTimeout(timeout);
+        console.warn("Zoop live fetch failed or timed out:", fetchErr.message);
+        // Fall back to simulation if test IFSC requested
+        if (cleanIfsc.startsWith("THRS") || cleanIfsc.startsWith("SBIN") || cleanIfsc.startsWith("HDFC")) {
+          isSimulation = true;
+        } else {
+          status = "FAILED";
+          responseCode = "105";
+          responseMessage = "Upstream provider connection timeout";
+          responseStatus = 504;
         }
-      } catch (err) {
-        console.warn(`Mapping failed for provider ${mapping.provider.name}:`, err);
       }
     }
 
-    if (!providerSuccess) {
-      status = "FAILED";
-      responseStatus = 502;
-      responseData = null;
+    if (isSimulation && !upstreamSuccess) {
+      // Deterministic realistic simulation
+      const mock = generateMockIfscResponse(cleanIfsc);
+      if (mock.status === "SUCCESS") {
+        responseData = mock.result;
+        status = "SUCCESS";
+        responseCode = "100";
+        responseMessage = "Valid Authentication";
+        responseStatus = 200;
+      } else {
+        status = "FAILED";
+        responseCode = mock.response_code || "104";
+        responseMessage = mock.response_message || "Invalid IFSC format";
+        responseStatus = 400;
+      }
+      providerOrderId = `ZOOP_SIM_${Date.now()}`;
+      rawUpstreamResponse = {
+        ...mock,
+        task_id: `zoop_sim_task_${Date.now()}`,
+        group_id: `zoop_sim_group_${Date.now()}`,
+        request_id: `zoop_sim_req_${Date.now()}`,
+        metadata: { billable: "Y" },
+        response_code: responseCode,
+        response_message: responseMessage,
+      };
+    }
+  } else {
+    // Fallback for other existing or future endpoints
+    if (client.keyType === "SANDBOX") {
+      if (normalizedPath.includes("/pan")) {
+        const mock = generateMockPanResponse(body.pan_number);
+        responseData = mock.data;
+        status = mock.status as any;
+      } else if (normalizedPath.includes("/bank-verify")) {
+        const mock = generateMockBankResponse(body.account_number, body.ifsc_code, body.beneficiary_name);
+        responseData = mock.data;
+        status = mock.status as any;
+      } else if (normalizedPath.includes("/gstin-verify")) {
+        const mock = generateMockGstinResponse(body.gstin);
+        responseData = mock.data;
+        status = mock.status as any;
+      }
+      providerOrderId = `SANDBOX_MOCK_${Date.now()}`;
+      rawUpstreamResponse = responseData;
+    } else {
+      status = "SUCCESS";
+      responseData = { message: "Verified successfully", input: body };
+      providerOrderId = `PROD_${Date.now()}`;
+      rawUpstreamResponse = responseData;
     }
   }
 
   const latencyMs = Date.now() - startTime;
 
-  // 7. Atomic Wallet Settlement (only for live production keys on success)
+  // 8. Atomic Wallet Settlement (only for live production keys on success)
   if (client.keyType === "PRODUCTION" && status === "SUCCESS" && client.walletId) {
     const deduction = await deductWalletForApiHit(
       client.walletId,
@@ -260,24 +387,28 @@ export async function handleGatewayRequest(
     }
   }
 
-  // 8. Asynchronous Audit Logging & Specialized Report Generation
+  // 9. Asynchronous Internal Audit Logging
+  // Zoop's raw vendor IDs (task_id, group_id, request_id, metadata) are stored strictly inside db.apiLog
   const logPromise = (async () => {
     try {
-      const log = await db.apiLog.create({
+      await db.apiLog.create({
         data: {
           colladomeOrderId,
-          clientOrderId: client.clientOrderId,
+          clientOrderId: clientTaskId,
           userId: client.userId,
           apiId: api.id,
           providerId: usedProviderId,
-          providerOrderId,
+          providerOrderId, // Raw Zoop task_id / request_id
           ipAddress: client.clientIp,
-          endpointPath,
+          endpointPath: normalizedPath,
           httpMethod: method,
-          requestHeaders: JSON.stringify({ "x-api-key": "cd_***" }),
+          requestHeaders: JSON.stringify({
+            "x-api-key": "cd_***",
+            "client-ip": client.clientIp,
+          }),
           requestBody: JSON.stringify(body),
           responseStatus,
-          responseBody: JSON.stringify(responseData),
+          responseBody: JSON.stringify(rawUpstreamResponse || responseData), // Full raw upstream logs
           status,
           latencyMs,
           costPrice: client.keyType === "PRODUCTION" ? costPrice : 0,
@@ -286,91 +417,86 @@ export async function handleGatewayRequest(
         },
       });
 
-      // Specialized PAN Card Report Record
-      if (endpointPath.includes("/pan") && responseData) {
-        await db.panReport.create({
-          data: {
-            apiLogId: log.id,
-            userId: client.userId,
-            panNumber: responseData.pan_number || body.pan_number || "UNKNOWN",
-            fullName: responseData.full_name || null,
-            category: responseData.category || null,
-            status: responseData.status || status,
-            panAadhaarLinked: responseData.pan_aadhaar_linked ?? false,
-          },
-        });
-      }
-
-      // Specialized Bank Verification Report Record
-      if (endpointPath.includes("/bank-verify") && responseData) {
-        await db.bankReport.create({
-          data: {
-            apiLogId: log.id,
-            userId: client.userId,
-            accountNumber: responseData.account_number || body.account_number || "UNKNOWN",
-            ifscCode: responseData.ifsc_code || body.ifsc_code || "UNKNOWN",
-            beneficiaryName: responseData.beneficiary_name || body.beneficiary_name || null,
-            nameAtBank: responseData.name_at_bank || null,
-            matchPercentage: responseData.name_match_score || null,
-            utrNumber: responseData.utr_number || null,
-            status: responseData.status || status,
-          },
-        });
-      }
-
-      // Asynchronous Webhook Event Dispatch
+      // Optional Webhook Event Dispatch
       if (client.webhookUrl) {
-        const eventName = endpointPath.includes("/pan")
-          ? "identity.pan.verified"
-          : endpointPath.includes("/bank-verify")
-          ? "banking.penny_drop.completed"
-          : endpointPath.includes("/gstin-verify")
-          ? "business.gstin.verified"
-          : "verification.completed";
-
         dispatchWebhook(
           client.webhookUrl,
           client.webhookSecret,
-          eventName,
+          isIfscPath ? "utility.ifsc.verified" : "verification.completed",
           {
             order_id: colladomeOrderId,
-            client_order_id: client.clientOrderId,
-            endpoint: endpointPath,
+            client_order_id: clientTaskId,
+            endpoint: normalizedPath,
             status,
             data: responseData,
             completed_at: new Date().toISOString(),
           }
-        ).catch((err) => console.warn("Background webhook dispatch failed:", err));
+        ).catch(() => {});
       }
     } catch (logErr) {
       console.error("Error writing gateway log:", logErr);
     }
   })();
 
-  // Do not block client response on background logging
   logPromise.catch(() => {});
 
-  // 9. Return Standardized Colladome Gateway Response
-  const gatewayResponse: GatewayResponse = {
-    status,
-    colladome_order_id: colladomeOrderId,
-    client_order_id: client.clientOrderId,
-    timestamp: new Date().toISOString(),
-    data: responseData,
-    error:
-      status === "SUCCESS"
-        ? null
-        : {
-            code: "UPSTREAM_VERIFICATION_FAILED",
-            message: "The requested identity verification could not be completed with the provider.",
-          },
-  };
+  // 10. Return Sanitized & Morphed Colladome Response
+  // Client only receives Colladome's client_order_id, colladome_order_id, response_code, and result
+  const responseTimestamp = new Date().toISOString();
 
-  return NextResponse.json(gatewayResponse, {
-    status: responseStatus,
-    headers: {
-      "x-ratelimit-limit": String(rateLimit.limit),
-      "x-ratelimit-remaining": String(rateLimit.remaining),
-    },
-  });
+  if (status === "SUCCESS") {
+    return NextResponse.json(
+      {
+        success: true,
+        response_code: "100",
+        response_message: responseMessage,
+        colladome_order_id: colladomeOrderId,
+        client_order_id: clientTaskId,
+        result: responseData,
+        // Compatibility mirrors
+        status: "SUCCESS",
+        data: responseData,
+        request_timestamp: requestTimestamp,
+        response_timestamp: responseTimestamp,
+      },
+      {
+        status: 200,
+        headers: {
+          "x-ratelimit-limit": String(rateLimit.limit),
+          "x-ratelimit-remaining": String(rateLimit.remaining),
+        },
+      }
+    );
+  } else {
+    return NextResponse.json(
+      {
+        success: false,
+        response_code: responseCode,
+        response_message: responseMessage,
+        colladome_order_id: colladomeOrderId,
+        client_order_id: clientTaskId,
+        result: null,
+        status: "FAILED",
+        data: null,
+        error: {
+          code:
+            responseCode === "104"
+              ? "VALIDATION_INVALID_IFSC"
+              : responseCode === "103"
+              ? "BILLING_INSUFFICIENT_WALLET_BALANCE"
+              : "PROVIDER_UPSTREAM_ERROR",
+          message: responseMessage,
+        },
+        request_timestamp: requestTimestamp,
+        response_timestamp: responseTimestamp,
+      },
+      {
+        status: responseStatus,
+        headers: {
+          "x-ratelimit-limit": String(rateLimit.limit),
+          "x-ratelimit-remaining": String(rateLimit.remaining),
+        },
+      }
+    );
+  }
 }

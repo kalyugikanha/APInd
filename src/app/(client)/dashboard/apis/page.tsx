@@ -104,6 +104,21 @@ export default function ClientApiCatalogPage() {
 
   const requestSampleJson = (() => {
     if (!selectedApi) return "{}";
+    if (selectedApi.endpointPath?.includes("ifsc") || selectedApi.slug?.includes("ifsc")) {
+      return JSON.stringify(
+        {
+          mode: "sync",
+          data: {
+            ifsc: "THRS0000XXX",
+            consent: "Y",
+            consent_text: "I hear by declare my consent agreement for fetching my information via Colladome API",
+          },
+          task_id: "f26eb21e-4c35-4491-b2d5-41fa0e545a34",
+        },
+        null,
+        2
+      );
+    }
     if (selectedApi.endpointPath?.includes("/pan")) {
       return JSON.stringify({ pan_number: "ABCDE1234F", consent: "Y" }, null, 2);
     }
@@ -241,7 +256,7 @@ export default function ClientApiCatalogPage() {
                         </span>
                       </td>
                       <td className="py-4 px-3 font-mono text-slate-800 font-semibold">
-                        {`/api${api.endpointPath}`}
+                        {api.endpointPath}
                       </td>
                       <td className="py-4 px-3 font-bold text-slate-900">
                         ₹{(api.defaultSellPrice || 2.5).toFixed(2)}
@@ -294,7 +309,7 @@ export default function ClientApiCatalogPage() {
                     <span className="font-bold bg-slate-200 text-slate-800 px-1.5 py-0.5 rounded text-[10px]">
                       {selectedApi.httpMethod}
                     </span>
-                    <span>{`/api${selectedApi.endpointPath}`}</span>
+                    <span>{selectedApi.endpointPath}</span>
                   </div>
                 </div>
               </div>
@@ -323,9 +338,9 @@ export default function ClientApiCatalogPage() {
               {/* Integration Endpoint Box */}
               <div className="bg-slate-950 text-white p-4 rounded-xl border border-slate-800 space-y-3 font-mono">
                 <div className="flex items-center justify-between text-slate-400 text-[11px]">
-                  <span>Gateway Request URL</span>
+                  <span>Primary Gateway URL (Query Param Auth)</span>
                   <button
-                    onClick={() => handleCopy(`${baseUrl}/api${selectedApi.endpointPath}`, "url")}
+                    onClick={() => handleCopy(`${baseUrl}${selectedApi.endpointPath}?api_key=${apiKeyHint}`, "url")}
                     className="hover:text-white flex items-center gap-1 transition"
                   >
                     {copiedSection === "url" ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
@@ -334,21 +349,27 @@ export default function ClientApiCatalogPage() {
                 </div>
                 <div className="text-sm font-bold text-emerald-400 break-all select-all">
                   <span className="text-white">{selectedApi.httpMethod} </span>
-                  {`${baseUrl}/api${selectedApi.endpointPath}`}
+                  {`${baseUrl}${selectedApi.endpointPath}?api_key=${apiKeyHint}`}
                 </div>
 
-                <div className="pt-2 border-t border-slate-800 text-[11px] text-slate-400 space-y-1">
-                  <div className="font-bold text-slate-300">Required Colladome Headers:</div>
-                  <div>
-                    <code className="text-slate-200 font-bold">x-api-key:</code>{" "}
-                    <span className="text-slate-400">&lt;YOUR_API_KEY&gt;</span>
+                <div className="pt-2 border-t border-slate-800 text-[11px] text-slate-400 space-y-1.5">
+                  <div className="font-bold text-slate-300">Authentication Options:</div>
+                  <div className="text-slate-300">
+                    <span className="text-emerald-400 font-bold">1. Query Parameter (Primary):</span>{" "}
+                    <code>?api_key=&lt;YOUR_API_KEY&gt;</code> in Base URL
                   </div>
                   <div>
-                    <code className="text-slate-200 font-bold">Content-Type:</code> application/json
+                    <span className="text-slate-300 font-bold">2. Request Header (Alternative):</span>{" "}
+                    <code className="text-slate-200">x-api-key:</code> &lt;YOUR_API_KEY&gt;
                   </div>
                   <div>
-                    <code className="text-slate-200 font-bold">x-client-order-id:</code>{" "}
-                    <span className="text-slate-400">(optional client tracking reference)</span>
+                    <span className="text-slate-300 font-bold">3. Content-Type:</span>{" "}
+                    <code className="text-slate-200">application/json</code>
+                  </div>
+                  <div>
+                    <span className="text-slate-300 font-bold">4. Client Order ID:</span>{" "}
+                    <code className="text-slate-200">task_id</code> in JSON body or{" "}
+                    <code className="text-slate-200">client-order-id</code> header (returned as client_order_id in response)
                   </div>
                 </div>
               </div>
@@ -444,7 +465,7 @@ export default function ClientApiCatalogPage() {
                   </span>
                   <button
                     onClick={() => {
-                      const curlCode = `curl -X ${selectedApi.httpMethod} "${baseUrl}/api${selectedApi.endpointPath}" \\\n  -H "x-api-key: ${apiKeyHint}" \\\n  -H "Content-Type: application/json" \\\n  -d '${requestSampleJson.replace(/\n/g, "")}'`;
+                      const curlCode = `curl -X ${selectedApi.httpMethod} "${baseUrl}${selectedApi.endpointPath}?api_key=${apiKeyHint}" \\\n  -H "Content-Type: application/json" \\\n  -d '${requestSampleJson.replace(/\n/g, "")}'`;
                       handleCopy(curlCode, "curl");
                     }}
                     className="text-blue-600 hover:text-blue-700 font-bold flex items-center gap-1 text-[11px]"
@@ -454,7 +475,13 @@ export default function ClientApiCatalogPage() {
                   </button>
                 </div>
                 <pre className="p-3 bg-slate-900 text-slate-100 rounded-xl font-mono text-[11px] overflow-x-auto border border-slate-800 leading-relaxed select-all">
-{`curl -X ${selectedApi.httpMethod} "${baseUrl}/api${selectedApi.endpointPath}" \\
+{`# 1. Primary Query Param Authentication
+curl -X ${selectedApi.httpMethod} "${baseUrl}${selectedApi.endpointPath}?api_key=${apiKeyHint}" \\
+  -H "Content-Type: application/json" \\
+  -d '${requestSampleJson.replace(/\n/g, "")}'
+
+# 2. Alternative Header Authentication
+curl -X ${selectedApi.httpMethod} "${baseUrl}${selectedApi.endpointPath}" \\
   -H "x-api-key: ${apiKeyHint}" \\
   -H "Content-Type: application/json" \\
   -d '${requestSampleJson.replace(/\n/g, "")}'`}

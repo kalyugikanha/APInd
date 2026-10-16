@@ -60,10 +60,25 @@ export function isIpAllowed(clientIp: string, allowedIps: string[]): boolean {
  */
 export async function authenticateApiRequest(req: NextRequest): Promise<{
   client?: AuthenticatedClient;
-  error?: { status: number; code: string; message: string };
+  error?: { status: number; code: string; response_code: string; message: string };
 }> {
-  const apiKey = req.headers.get("x-api-key") || req.headers.get("authorization")?.replace("Bearer ", "");
-  const clientOrderId = req.headers.get("x-client-order-id") || null;
+  // 1. Extract API key from Base URL query parameters (primary) or request headers
+  const queryApiKey = req.nextUrl?.searchParams?.get("api_key") || req.nextUrl?.searchParams?.get("apiKey");
+  const headerApiKey =
+    req.headers.get("api-key") ||
+    req.headers.get("x-api-key") ||
+    req.headers.get("authorization")?.replace("Bearer ", "");
+  const apiKey = queryApiKey || headerApiKey;
+
+  // 2. Extract Client Order / Task ID
+  const clientOrderId =
+    req.headers.get("x-client-order-id") ||
+    req.headers.get("client-order-id") ||
+    req.headers.get("task-id") ||
+    req.nextUrl?.searchParams?.get("client_order_id") ||
+    req.nextUrl?.searchParams?.get("task_id") ||
+    null;
+
   const clientIp = extractClientIp(req);
 
   const playgroundUserId = req.headers.get("x-playground-user-id");
@@ -104,8 +119,9 @@ export async function authenticateApiRequest(req: NextRequest): Promise<{
     return {
       error: {
         status: 401,
-        code: "MISSING_API_KEY",
-        message: "Missing 'x-api-key' header. Please provide your Colladome API Key.",
+        code: "AUTH_INVALID_API_KEY",
+        response_code: "101",
+        message: "Missing Colladome API Key. Pass 'api_key' in Base URL query parameter (e.g. ?api_key=YOUR_KEY) or 'x-api-key' header.",
       },
     };
   }
@@ -129,8 +145,9 @@ export async function authenticateApiRequest(req: NextRequest): Promise<{
     return {
       error: {
         status: 401,
-        code: "INVALID_API_KEY",
-        message: "The provided API key is invalid or has been revoked.",
+        code: "AUTH_INVALID_API_KEY",
+        response_code: "101",
+        message: "Invalid or inactive Colladome API key.",
       },
     };
   }
@@ -141,8 +158,9 @@ export async function authenticateApiRequest(req: NextRequest): Promise<{
     return {
       error: {
         status: 403,
-        code: "ACCOUNT_SUSPENDED",
-        message: `Your Colladome account is currently ${user.accountStatus.toLowerCase()}. Please contact support.`,
+        code: "AUTH_ACCOUNT_SUSPENDED",
+        response_code: "101",
+        message: `Your Colladome client account is currently ${user.accountStatus.toLowerCase()}. Please contact support.`,
       },
     };
   }
@@ -163,7 +181,8 @@ export async function authenticateApiRequest(req: NextRequest): Promise<{
     return {
       error: {
         status: 403,
-        code: "IP_NOT_WHITELISTED",
+        code: "SECURITY_IP_NOT_WHITELISTED",
+        response_code: "102",
         message: `Forbidden: Client IP '${clientIp}' is not authorized in your Colladome IP Whitelist.`,
       },
     };

@@ -117,3 +117,169 @@ export function generateMockGstinResponse(gstin: string) {
     },
   };
 }
+
+export function generateMockIfscResponse(ifscCode: string) {
+  const ifscUpper = (ifscCode || "").trim().toUpperCase();
+  const ifscValid = /^[A-Z]{4}0[A-Z0-9]{6}$/.test(ifscUpper) || ifscUpper.length === 11;
+
+  if (!ifscValid) {
+    return {
+      status: "FAILED",
+      success: false,
+      response_code: "104",
+      response_message: "Invalid IFSC format. Must be an 11-character alphanumeric code.",
+      result: null,
+    };
+  }
+
+  const bankCode = ifscUpper.substring(0, 4);
+  const knownBanks: Record<
+    string,
+    {
+      bank: string;
+      state: string;
+      city: string;
+      address: string;
+      micr: string;
+      contact: string;
+      branch: string;
+      centre: string;
+      district: string;
+      upi: boolean;
+    }
+  > = {
+    SBIN: {
+      bank: "State Bank of India",
+      state: "MAHARASHTRA",
+      city: "MUMBAI",
+      branch: "MUMBAI MAIN",
+      centre: "MUMBAI",
+      address: "SAMACHAAR MARG, FORT, MUMBAI, MAHARASHTRA 400023",
+      contact: "022-22661234",
+      district: "GREATER MUMBAI",
+      micr: "400002001",
+      upi: true,
+    },
+    HDFC: {
+      bank: "HDFC Bank Limited",
+      state: "MAHARASHTRA",
+      city: "MUMBAI",
+      branch: "WORLI SANDOZ HOUSE",
+      centre: "MUMBAI",
+      address: "GROUND FLOOR, SANDOZ HOUSE, DR A B ROAD, WORLI, MUMBAI 400018",
+      contact: "022-67564321",
+      district: "MUMBAI",
+      micr: "400240002",
+      upi: true,
+    },
+    ICIC: {
+      bank: "ICICI Bank Limited",
+      state: "MAHARASHTRA",
+      city: "MUMBAI",
+      branch: "BANDRA KURLA COMPLEX",
+      centre: "MUMBAI",
+      address: "ICICI BANK TOWERS, BANDRA KURLA COMPLEX, MUMBAI 400051",
+      contact: "022-26531414",
+      district: "MUMBAI",
+      micr: "400229002",
+      upi: true,
+    },
+    UTIB: {
+      bank: "Axis Bank",
+      state: "MAHARASHTRA",
+      city: "MUMBAI",
+      branch: "CORPORATE OFFICE",
+      centre: "MUMBAI",
+      address: "AXIS HOUSE, WADIA INTERNATIONAL CENTRE, PANDURANG BUDHKAR MARG, WORLI, MUMBAI 400025",
+      contact: "022-24252525",
+      district: "MUMBAI",
+      micr: "400211002",
+      upi: true,
+    },
+    KKBK: {
+      bank: "Kotak Mahindra Bank",
+      state: "MAHARASHTRA",
+      city: "MUMBAI",
+      branch: "NARIMAN POINT",
+      centre: "MUMBAI",
+      address: "BAKHTAWAR, NARIMAN POINT, MUMBAI 400021",
+      contact: "022-66006022",
+      district: "MUMBAI",
+      micr: "400485002",
+      upi: true,
+    },
+    PUNB: {
+      bank: "Punjab National Bank",
+      state: "DELHI",
+      city: "NEW DELHI",
+      branch: "CONNAUGHT PLACE",
+      centre: "NEW DELHI",
+      address: "ECE HOUSE, CONNAUGHT PLACE, NEW DELHI 110001",
+      contact: "011-23321456",
+      district: "CENTRAL DELHI",
+      micr: "110024002",
+      upi: true,
+    },
+    BARB: {
+      bank: "Bank of Baroda",
+      state: "GUJARAT",
+      city: "VADODARA",
+      branch: "MANDVI",
+      centre: "VADODARA",
+      address: "P B NO 18, MANDVI, VADODARA, GUJARAT 390006",
+      contact: "0265-2412345",
+      district: "VADODARA",
+      micr: "390012002",
+      upi: true,
+    },
+    THRS: {
+      bank: "Thrissur District Co-Operative Bank",
+      state: "KERALA",
+      city: "KODUNGALLUR",
+      branch: "KODUNGALLUR",
+      centre: "THRISSUR",
+      address: "MAIN ROAD, KODUNGALLUR, THRISSUR DISTRICT, KERALA 680664",
+      contact: "0480-2802244",
+      district: "THRISSUR",
+      micr: "680800002",
+      upi: false,
+    },
+  };
+
+  const bankInfo = knownBanks[bankCode] || {
+    bank: `${bankCode} BANK LIMITED`,
+    state: "MAHARASHTRA",
+    city: "MUMBAI",
+    branch: "COMMERCIAL BRANCH",
+    centre: "MUMBAI",
+    address: `COMMERCIAL BRANCH, ${bankCode} TOWER, FINANCIAL DISTRICT, MUMBAI 400001`,
+    contact: "022-49876543",
+    district: "GREATER MUMBAI",
+    micr: `${Math.floor(100000000 + Math.random() * 900000000)}`,
+    upi: true,
+  };
+
+  return {
+    status: "SUCCESS",
+    success: true,
+    response_code: "100",
+    response_message: "Valid Authentication",
+    result: {
+      upi: bankInfo.upi,
+      bank: bankInfo.bank,
+      city: bankInfo.city,
+      ifsc: ifscUpper,
+      imps: true,
+      micr: bankInfo.micr,
+      neft: true,
+      rtgs: true,
+      state: bankInfo.state,
+      branch: bankInfo.branch,
+      centre: bankInfo.centre,
+      address: bankInfo.address,
+      contact: bankInfo.contact,
+      district: bankInfo.district,
+      bank_code: bankCode,
+    },
+  };
+}
