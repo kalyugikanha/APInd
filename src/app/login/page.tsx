@@ -45,11 +45,16 @@ export default function LoginPage() {
 
     if (mode === "login") {
       try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 15000);
+
         const res = await fetch("/api/internal/auth/login", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ email, password }),
+          signal: controller.signal,
         });
+        clearTimeout(timeoutId);
 
         const data = await res.json();
         if (!res.ok) {
@@ -64,12 +69,20 @@ export default function LoginPage() {
           router.refresh();
         }, 400);
       } catch (err: any) {
-        setErrorMsg(err.message || "Invalid credentials. Please try again.");
+        if (err.name === "AbortError") {
+          setErrorMsg("Request timed out. Please check your network and try again.");
+        } else {
+          setErrorMsg(err.message || "Invalid credentials. Please try again.");
+        }
       } finally {
         setLoading(false);
       }
+    } else {
       // Sign up flow: call clean signup endpoint with user's actual password
       try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 20000);
+
         const res = await fetch("/api/internal/auth/signup", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -79,19 +92,27 @@ export default function LoginPage() {
             companyName: companyName || undefined,
             contactPerson: contactPerson || undefined,
           }),
+          signal: controller.signal,
         });
+        clearTimeout(timeoutId);
+
         const data = await res.json();
-        if (res.ok) {
-          setSuccessMsg(data.message || "Account created! Redirecting to your dashboard...");
-          setTimeout(() => {
-            router.push(data.redirectUrl || "/dashboard");
-            router.refresh();
-          }, 500);
-        } else {
-          setErrorMsg(data.error || "Failed to create account");
+        if (!res.ok) {
+          throw new Error(data.error || "Failed to create account");
         }
+
+        setSuccessMsg(data.message || "Account created! Redirecting to your dashboard...");
+        const destination = redirectParam || data.redirectUrl || "/dashboard";
+        setTimeout(() => {
+          router.push(destination);
+          router.refresh();
+        }, 500);
       } catch (err: any) {
-        setErrorMsg(err.message || "Registration failed");
+        if (err.name === "AbortError") {
+          setErrorMsg("Account creation timed out. Please check your connection and try again.");
+        } else {
+          setErrorMsg(err.message || "Registration failed. Please try again.");
+        }
       } finally {
         setLoading(false);
       }

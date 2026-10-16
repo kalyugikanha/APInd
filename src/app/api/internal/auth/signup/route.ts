@@ -44,11 +44,19 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Generate unique client code (e.g. CD-1001)
-    const clientCount = await db.user.count({
-      where: { role: { in: ["CLIENT_ADMIN", "CLIENT_DEV"] } },
-    });
-    const clientCode = `CD-${1001 + clientCount}`;
+    // Generate guaranteed unique client code (e.g. CD-1002)
+    let clientCode = "";
+    for (let i = 0; i < 15; i++) {
+      const candidate = `CD-${1000 + Math.floor(1000 + Math.random() * 9000)}`;
+      const existingCode = await db.user.findUnique({ where: { clientCode: candidate } });
+      if (!existingCode) {
+        clientCode = candidate;
+        break;
+      }
+    }
+    if (!clientCode) {
+      clientCode = `CD-${Date.now().toString().slice(-6)}`;
+    }
 
     // Generate default Sandbox trial key
     const sandboxKey = generateApiKey("SANDBOX");
@@ -136,7 +144,9 @@ export async function POST(req: NextRequest) {
     });
 
     // Set 7-day secure HttpOnly session cookie
-    response.cookies.set(SESSION_COOKIE_NAME, token, {
+    response.cookies.set({
+      name: SESSION_COOKIE_NAME,
+      value: token,
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
       sameSite: "lax",
