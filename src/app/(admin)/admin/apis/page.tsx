@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
+import Link from "next/link";
 import {
   Layers,
   Plus,
@@ -90,27 +91,27 @@ export default function AdminApisPage() {
     httpMethod: "POST",
     description: "",
     useCase: "",
-    defaultCostPrice: 1.5,
-    defaultSellPrice: 2.5,
+    defaultCostPrice: 0,
+    defaultSellPrice: 0,
     primaryProviderId: "",
     primaryEndpoint: "",
     secondaryProviderId: "",
     secondaryEndpoint: "",
-    requestSchemaText: '{\n  "pan_number": { "type": "string", "required": true, "example": "ABCDE1234F" }\n}',
-    responseSchemaText: '{\n  "status": "VALID",\n  "full_name": "JOHN DOE"\n}',
+    requestSchemaText: "",
+    responseSchemaText: "",
   });
 
   // Fast Raw Integrator state
   const [fastMode, setFastMode] = useState<"fast" | "advanced">("fast");
   const [fastForm, setFastForm] = useState({
     name: "",
-    baseUrl: "https://api.zoop.one",
-    endpointPath: "/api/v1/in/identity/pan",
+    baseUrl: "",
+    endpointPath: "",
     httpMethod: "POST",
-    headersText: '{\n  "app-id": "YOUR_APP_ID",\n  "api-key": "YOUR_API_KEY",\n  "Content-Type": "application/json"\n}',
-    bodyText: '{\n  "pan_number": "ABCDE1234F",\n  "consent": "Y"\n}',
-    sellPrice: 2.5,
-    costPrice: 1.8,
+    headersText: "",
+    bodyText: "",
+    sellPrice: 0,
+    costPrice: 0,
     categoryId: "",
   });
 
@@ -327,78 +328,118 @@ export default function AdminApisPage() {
 
       {/* Tab 1: Catalog */}
       {activeTab === "catalog" && (
-        <div className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {apis.map((api) => {
-              const primaryMapping = api.providerMappings?.find((m: any) => m.priority === 1);
-              const fallbackMapping = api.providerMappings?.find((m: any) => m.priority === 2);
-              const margin = api.defaultSellPrice - api.defaultCostPrice;
+        <div className="bg-white rounded-2xl border border-neutral-200 shadow-sm overflow-hidden">
+          <div className="p-5 border-b border-neutral-200 flex flex-wrap items-center justify-between gap-3 bg-neutral-50/50">
+            <div>
+              <h2 className="text-sm font-bold text-neutral-900">API Catalog & Upstream Routing Table</h2>
+              <p className="text-xs text-neutral-500 mt-0.5">
+                Overview of gateway routes, upstream provider mappings, pricing, and profit margins
+              </p>
+            </div>
+            <button
+              onClick={() => setActiveTab("create")}
+              className="px-3 py-1.5 rounded-lg bg-black hover:bg-neutral-800 text-white text-xs font-semibold shadow-sm transition flex items-center gap-1.5"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              <span>Add New API Route</span>
+            </button>
+          </div>
 
-              return (
-                <div
-                  key={api.id}
-                  className="bg-white rounded-xl border border-neutral-200 p-5 shadow-sm space-y-4 hover:border-neutral-300 transition"
-                >
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <span className="text-[10px] font-bold text-neutral-700 bg-neutral-100 border border-neutral-200 px-2 py-0.5 rounded">
-                        {api.category.name}
-                      </span>
-                      <h3 className="font-bold text-base text-neutral-900 mt-1">{api.name}</h3>
-                    </div>
-                    <span className="px-2 py-1 bg-neutral-100 text-neutral-800 font-mono text-xs font-bold rounded border border-neutral-200">
-                      {api.httpMethod}
-                    </span>
-                  </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs">
+              <thead className="bg-neutral-50 border-b border-neutral-200 text-neutral-600 font-bold uppercase tracking-wider text-[10px]">
+                <tr>
+                  <th className="py-3.5 px-4">API Name</th>
+                  <th className="py-3.5 px-3">Category</th>
+                  <th className="py-3.5 px-3">Method</th>
+                  <th className="py-3.5 px-3 font-mono">Gateway Route</th>
+                  <th className="py-3.5 px-3">Upstream Provider</th>
+                  <th className="py-3.5 px-3">Cost Price</th>
+                  <th className="py-3.5 px-3">Retail Sell</th>
+                  <th className="py-3.5 px-3">Net Margin</th>
+                  <th className="py-3.5 px-4 text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-neutral-100">
+                {apis.map((api) => {
+                  const primaryMapping = api.providerMappings?.find((m: any) => m.priority === 1);
+                  const fallbackMapping = api.providerMappings?.find((m: any) => m.priority === 2);
+                  const margin = api.defaultSellPrice - api.defaultCostPrice;
 
-                  {/* Gateway Path */}
-                  <div className="bg-neutral-50 p-2.5 rounded-lg border border-neutral-200">
-                    <div className="text-[10px] text-neutral-400 uppercase font-semibold">Colladome Public Gateway:</div>
-                    <code className="text-xs text-neutral-900 font-mono font-bold">
-                      https://api.colladome.com{api.endpointPath}
-                    </code>
-                  </div>
-
-                  {/* Provider Routing Details */}
-                  <div className="grid grid-cols-2 gap-2 text-xs">
-                    <div className="p-2.5 rounded-lg bg-neutral-50 border border-neutral-150">
-                      <div className="text-[10px] text-neutral-400 font-medium">Primary Provider:</div>
-                      <div className="font-bold text-neutral-900 mt-0.5">
-                        {primaryMapping?.provider?.name || "Configured Provider"}
-                      </div>
-                      <div className="text-[10px] text-neutral-500 font-mono truncate mt-0.5">
-                        {primaryMapping?.providerEndpoint}
-                      </div>
-                    </div>
-
-                    <div className="p-2.5 rounded-lg bg-neutral-50 border border-neutral-150">
-                      <div className="text-[10px] text-neutral-400 font-medium">Secondary Failover:</div>
-                      <div className="font-bold text-neutral-900 mt-0.5">
-                        {fallbackMapping?.provider?.name || "Auto-Failover Active"}
-                      </div>
-                      <div className="text-[10px] text-neutral-500 font-mono truncate mt-0.5">
-                        {fallbackMapping?.providerEndpoint || "Same Route"}
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Pricing Breakdown */}
-                  <div className="flex items-center justify-between text-xs pt-3 border-t border-neutral-100">
-                    <div>
-                      <span className="text-neutral-400">Cost: </span>
-                      <strong className="text-neutral-700">₹{api.defaultCostPrice.toFixed(2)}</strong>
-                    </div>
-                    <div>
-                      <span className="text-neutral-400">Retail Sell: </span>
-                      <strong className="text-neutral-900 font-bold">₹{api.defaultSellPrice.toFixed(2)}</strong>
-                    </div>
-                    <div className="text-neutral-900 font-bold bg-neutral-100 border border-neutral-200 px-2 py-0.5 rounded">
-                      +₹{margin.toFixed(2)} Margin
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
+                  return (
+                    <tr key={api.id} className="hover:bg-neutral-50/80 transition">
+                      <td className="py-3.5 px-4">
+                        <div className="font-bold text-neutral-900 text-sm">{api.name}</div>
+                        <div className="text-[11px] text-neutral-500 line-clamp-1 max-w-xs mt-0.5">
+                          {api.description}
+                        </div>
+                      </td>
+                      <td className="py-3.5 px-3">
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-neutral-100 text-neutral-700 font-medium text-[11px]">
+                          {api.category?.name || "General"}
+                        </span>
+                      </td>
+                      <td className="py-3.5 px-3">
+                        <span className="font-mono font-extrabold px-2 py-0.5 rounded text-[10px] bg-black text-white">
+                          {api.httpMethod || "POST"}
+                        </span>
+                      </td>
+                      <td className="py-3.5 px-3 font-mono font-bold text-neutral-800">
+                        /api{api.endpointPath}
+                      </td>
+                      <td className="py-3.5 px-3 text-xs">
+                        <div className="flex items-center gap-1.5">
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                          <span className="font-semibold text-neutral-900">
+                            {primaryMapping?.provider?.name || "Configured Provider"}
+                          </span>
+                        </div>
+                        <div className="text-[10px] text-neutral-400 font-mono truncate mt-0.5 max-w-[160px]">
+                          {primaryMapping?.providerEndpoint || "-"}
+                        </div>
+                        {fallbackMapping && (
+                          <div className="text-[10px] text-neutral-400 font-mono mt-0.5 flex items-center gap-1">
+                            <span className="text-neutral-500">↳ Failover:</span>
+                            <span className="text-neutral-700 font-semibold">{fallbackMapping.provider?.name}</span>
+                          </div>
+                        )}
+                      </td>
+                      <td className="py-3.5 px-3 font-semibold text-neutral-700">
+                        ₹{api.defaultCostPrice.toFixed(2)}
+                      </td>
+                      <td className="py-3.5 px-3 font-bold text-neutral-900">
+                        ₹{api.defaultSellPrice.toFixed(2)}
+                      </td>
+                      <td className="py-3.5 px-3 font-bold">
+                        <span className="text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded text-[11px]">
+                          +₹{margin.toFixed(2)}
+                        </span>
+                      </td>
+                      <td className="py-3.5 px-4 text-right">
+                        <div className="flex items-center justify-end gap-1.5">
+                          {primaryMapping?.provider && (
+                            <button
+                              type="button"
+                              onClick={() => handlePingProvider(primaryMapping.provider.id)}
+                              disabled={pingResults[primaryMapping.provider.id]?.loading}
+                              className="px-2.5 py-1 rounded bg-neutral-100 hover:bg-neutral-200 text-neutral-700 font-semibold text-[11px] transition"
+                            >
+                              {pingResults[primaryMapping.provider.id]?.loading ? "Pinging..." : "Test Ping"}
+                            </button>
+                          )}
+                          <Link
+                            href="/admin/charges"
+                            className="px-2.5 py-1 rounded bg-black hover:bg-neutral-800 text-white font-semibold text-[11px] transition"
+                          >
+                            Edit Pricing
+                          </Link>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
         </div>
       )}
@@ -776,119 +817,105 @@ export default function AdminApisPage() {
 
       {/* Tab 3: Providers */}
       {activeTab === "providers" && (
-        <div className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {providers.map((p) => (
-              <div
-                key={p.id}
-                className="bg-white rounded-xl border border-neutral-200 p-5 shadow-sm space-y-4 hover:border-neutral-300 transition flex flex-col justify-between"
-              >
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <h3 className="font-bold text-neutral-900 text-base">{p.name}</h3>
-                      <span className="font-mono text-[10px] font-bold bg-neutral-100 text-neutral-700 border border-neutral-200 px-2 py-0.5 rounded">
-                        {p.code}
-                      </span>
-                    </div>
+        <div className="bg-white rounded-2xl border border-neutral-200 shadow-sm overflow-hidden">
+          <div className="p-5 border-b border-neutral-200 flex flex-wrap items-center justify-between gap-3 bg-neutral-50/50">
+            <div>
+              <h2 className="text-sm font-bold text-neutral-900">Upstream Providers & Direct Gateways</h2>
+              <p className="text-xs text-neutral-500 mt-0.5">
+                Upstream provider integrations, encrypted credentials, base URLs, and real-time connectivity status
+              </p>
+            </div>
+          </div>
 
-                    <span
-                      className={`text-[10px] font-bold px-2 py-0.5 rounded border ${
-                        p.isSimulation
-                          ? "bg-amber-50 text-amber-800 border-amber-200"
-                          : "bg-emerald-50 text-emerald-800 border-emerald-200"
-                      }`}
-                    >
-                      {p.isSimulation ? "Simulation / Mock" : "Live Production"}
-                    </span>
-                  </div>
-
-                  <div className="bg-neutral-50 p-2.5 rounded-lg border border-neutral-200 space-y-1">
-                    <div className="text-[10px] text-neutral-400 font-semibold uppercase">Base URL</div>
-                    <code className="text-xs text-neutral-800 font-mono block break-all font-semibold">
-                      {p.baseUrl || "https://api.upstream.com"}
-                    </code>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-2 text-xs">
-                    <div className="p-2.5 rounded-lg bg-neutral-50 border border-neutral-150">
-                      <span className="text-[10px] text-neutral-400 block font-medium">Auth Method</span>
-                      <span className="font-mono font-semibold text-neutral-800 text-[11px] mt-0.5 block">
-                        {p.authType}
-                      </span>
-                    </div>
-
-                    <div className="p-2.5 rounded-lg bg-neutral-50 border border-neutral-150">
-                      <span className="text-[10px] text-neutral-400 block font-medium">API Key Credential</span>
-                      <span className="font-mono font-semibold text-neutral-800 text-[11px] mt-0.5 block truncate">
-                        {p.keyHint || "Not Configured"}
-                      </span>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center gap-2 text-[11px] text-neutral-500 pt-1">
-                    <Lock className="w-3.5 h-3.5 text-neutral-400 shrink-0" />
-                    <span>Encrypted with AES-256-GCM. Unencrypted keys are never logged.</span>
-                  </div>
-
-                  {/* Ping Result Alert */}
-                  {pingResults[p.id] && !pingResults[p.id]?.loading && (
-                    <div
-                      className={`p-2.5 rounded-lg text-[11px] font-mono flex items-center justify-between border ${
-                        pingResults[p.id]?.reachable
-                          ? "bg-emerald-50 text-emerald-800 border-emerald-200"
-                          : "bg-rose-50 text-rose-800 border-rose-200"
-                      }`}
-                    >
-                      <div className="flex items-center gap-1.5 truncate">
-                        <span
-                          className={`w-2 h-2 rounded-full shrink-0 ${
-                            pingResults[p.id]?.reachable ? "bg-emerald-500 animate-pulse" : "bg-rose-500"
-                          }`}
-                        ></span>
-                        <span className="font-bold">HTTP {pingResults[p.id]?.status || "ERR"}:</span>
-                        <span className="truncate">
-                          {pingResults[p.id]?.reachable ? "Reachable" : pingResults[p.id]?.error || "Unreachable"}
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs">
+              <thead className="bg-neutral-50 border-b border-neutral-200 text-neutral-600 font-bold uppercase tracking-wider text-[10px]">
+                <tr>
+                  <th className="py-3.5 px-4">Provider Name & Code</th>
+                  <th className="py-3.5 px-3">Base URL</th>
+                  <th className="py-3.5 px-3">Auth Type</th>
+                  <th className="py-3.5 px-3">Execution Mode</th>
+                  <th className="py-3.5 px-3">Connectivity Health</th>
+                  <th className="py-3.5 px-4 text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-neutral-100">
+                {providers.map((p) => {
+                  const ping = pingResults[p.id];
+                  return (
+                    <tr key={p.id} className="hover:bg-neutral-50/80 transition">
+                      <td className="py-3.5 px-4">
+                        <div className="flex items-center gap-2">
+                          <span className="font-bold text-slate-900 text-sm">{p.name}</span>
+                          <span className="font-mono text-[10px] font-bold bg-neutral-100 text-neutral-700 border border-neutral-200 px-1.5 py-0.5 rounded">
+                            {p.code}
+                          </span>
+                        </div>
+                        <div className="text-[11px] text-neutral-400 mt-0.5">
+                          Status: <span className="font-semibold text-neutral-700">{p.isActive ? "Online" : "Paused"}</span>
+                        </div>
+                      </td>
+                      <td className="py-3.5 px-3 font-mono font-semibold text-neutral-800 text-[11px]">
+                        {p.baseUrl || "https://api.upstream.com"}
+                      </td>
+                      <td className="py-3.5 px-3">
+                        <span className="font-mono text-[11px] font-semibold text-neutral-700 bg-neutral-100 px-2 py-0.5 rounded">
+                          {p.authType}
                         </span>
-                      </div>
-                      {pingResults[p.id]?.latencyMs !== undefined && (
-                        <span className="shrink-0 font-bold ml-2">{pingResults[p.id]?.latencyMs}ms</span>
-                      )}
-                    </div>
-                  )}
-                </div>
-
-                <div className="pt-3 border-t border-neutral-100 flex flex-wrap items-center justify-between gap-2">
-                  <div className="text-[11px] text-neutral-400">
-                    Active Status: <span className="font-semibold text-neutral-700">{p.isActive ? "Online" : "Paused"}</span>
-                  </div>
-
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={() => handlePingProvider(p.id)}
-                      disabled={pingResults[p.id]?.loading}
-                      className="px-3 py-1.5 rounded-lg border border-neutral-200 hover:border-neutral-300 bg-white text-neutral-800 font-semibold text-xs transition flex items-center gap-1.5 shadow-xs disabled:opacity-50"
-                      title="Test Live Upstream Ping"
-                    >
-                      <Activity
-                        className={`w-3.5 h-3.5 ${
-                          pingResults[p.id]?.loading ? "animate-spin text-neutral-400" : "text-emerald-600"
-                        }`}
-                      />
-                      <span>{pingResults[p.id]?.loading ? "Pinging..." : "Test Connection"}</span>
-                    </button>
-
-                    <button
-                      onClick={() => handleOpenProviderModal(p)}
-                      className="px-3 py-1.5 rounded-lg bg-black hover:bg-neutral-800 text-white font-semibold text-xs transition flex items-center gap-1.5 shadow-sm"
-                    >
-                      <Sliders className="w-3.5 h-3.5" />
-                      <span>Configure</span>
-                    </button>
-                  </div>
-                </div>
-              </div>
-            ))}
+                      </td>
+                      <td className="py-3.5 px-3">
+                        <span
+                          className={`text-[10px] font-bold px-2 py-0.5 rounded border ${
+                            p.isSimulation
+                              ? "bg-amber-50 text-amber-800 border-amber-200"
+                              : "bg-emerald-50 text-emerald-800 border-emerald-200"
+                          }`}
+                        >
+                          {p.isSimulation ? "Sandbox Simulation" : "Live Production"}
+                        </span>
+                      </td>
+                      <td className="py-3.5 px-3 font-mono text-[11px]">
+                        {ping && !ping.loading ? (
+                          <div className="flex items-center gap-1.5">
+                            <span
+                              className={`w-2 h-2 rounded-full ${
+                                ping.reachable ? "bg-emerald-500 animate-pulse" : "bg-rose-500"
+                              }`}
+                            ></span>
+                            <span className={ping.reachable ? "text-emerald-700 font-bold" : "text-rose-700 font-bold"}>
+                              {ping.reachable ? `Reachable (${ping.latencyMs}ms)` : "Unreachable"}
+                            </span>
+                          </div>
+                        ) : (
+                          <span className="text-neutral-400 font-sans">Ready for test</span>
+                        )}
+                      </td>
+                      <td className="py-3.5 px-4 text-right">
+                        <div className="flex items-center justify-end gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => handlePingProvider(p.id)}
+                            disabled={ping?.loading}
+                            className="px-2.5 py-1 rounded bg-neutral-100 hover:bg-neutral-200 text-neutral-700 font-semibold text-[11px] transition flex items-center gap-1"
+                          >
+                            <Activity className={`w-3 h-3 ${ping?.loading ? "animate-spin" : "text-emerald-600"}`} />
+                            <span>{ping?.loading ? "Pinging..." : "Test"}</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleOpenProviderModal(p)}
+                            className="px-2.5 py-1 rounded bg-black hover:bg-neutral-800 text-white font-semibold text-[11px] transition flex items-center gap-1"
+                          >
+                            <Sliders className="w-3 h-3" />
+                            <span>Configure</span>
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
         </div>
       )}

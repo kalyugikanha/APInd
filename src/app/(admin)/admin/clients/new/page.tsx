@@ -30,12 +30,12 @@ export default function AdminNewClientPage() {
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
 
   const [form, setForm] = useState({
-    companyName: "Selfup Community",
+    companyName: "",
     brandName: "",
-    fullName: "Akash",
-    email: "selfupcommunity@gmail.com",
+    fullName: "",
+    email: "",
     phone: "",
-    password: "Selfup@2026",
+    password: "Password@123",
     businessType: "PVT_LTD",
     businessPan: "",
     gstin: "",
