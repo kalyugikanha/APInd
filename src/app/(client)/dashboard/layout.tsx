@@ -121,17 +121,19 @@ export default function ClientDashboardLayout({ children }: { children: React.Re
                   {profile?.fullName || "Vikram Malhotra"}
                   <div className="text-[10px] text-slate-400 font-normal">{profile?.email}</div>
                 </div>
+                {(profile?.role === "SUPER_ADMIN" || profile?.role === "ADMIN_STAFF") && (
+                  <Link
+                    href="/admin/dashboard"
+                    className="block px-3 py-1.5 rounded-lg hover:bg-slate-100 text-slate-700 font-semibold text-blue-600"
+                  >
+                    Super Admin Console
+                  </Link>
+                )}
                 <Link
-                  href="/admin/dashboard"
+                  href="/dashboard/apis"
                   className="block px-3 py-1.5 rounded-lg hover:bg-slate-100 text-slate-700"
                 >
-                  Switch to Admin Portal
-                </Link>
-                <Link
-                  href="/developer"
-                  className="block px-3 py-1.5 rounded-lg hover:bg-slate-100 text-slate-700"
-                >
-                  API Documentation
+                  API Catalog & Docs
                 </Link>
                 <button
                   type="button"

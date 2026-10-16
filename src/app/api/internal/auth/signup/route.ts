@@ -77,7 +77,7 @@ export async function POST(req: NextRequest) {
         creditLimit: 0,
         wallet: {
           create: {
-            balance: 100.0, // ₹100.00 trial credits for instant sandbox testing
+            balance: 0.0, // Starting balance is ₹0.00; admin credits testing funds as needed
             currency: "INR",
           },
         },
@@ -105,21 +105,6 @@ export async function POST(req: NextRequest) {
         wallet: true,
       },
     });
-
-    // Record welcome trial bonus transaction
-    if (newUser.wallet) {
-      await db.walletTransaction.create({
-        data: {
-          walletId: newUser.wallet.id,
-          amount: 100.0,
-          type: "CREDIT",
-          balanceBefore: 0.0,
-          balanceAfter: 100.0,
-          referenceId: "WELCOME_TRIAL_BONUS",
-          description: "Welcome developer trial bonus",
-        },
-      });
-    }
 
     // Create session token
     const token = createSessionToken({

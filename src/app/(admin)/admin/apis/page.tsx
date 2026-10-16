@@ -20,6 +20,7 @@ import {
   Sliders,
   Radio,
   Activity,
+  Zap,
 } from "lucide-react";
 
 export default function AdminApisPage() {
@@ -98,6 +99,74 @@ export default function AdminApisPage() {
     requestSchemaText: '{\n  "pan_number": { "type": "string", "required": true, "example": "ABCDE1234F" }\n}',
     responseSchemaText: '{\n  "status": "VALID",\n  "full_name": "JOHN DOE"\n}',
   });
+
+  // Fast Raw Integrator state
+  const [fastMode, setFastMode] = useState<"fast" | "advanced">("fast");
+  const [fastForm, setFastForm] = useState({
+    name: "",
+    baseUrl: "https://api.zoop.one",
+    endpointPath: "/api/v1/in/identity/pan",
+    httpMethod: "POST",
+    headersText: '{\n  "app-id": "YOUR_APP_ID",\n  "api-key": "YOUR_API_KEY",\n  "Content-Type": "application/json"\n}',
+    bodyText: '{\n  "pan_number": "ABCDE1234F",\n  "consent": "Y"\n}',
+    sellPrice: 2.5,
+    costPrice: 1.8,
+    categoryId: "",
+  });
+
+  const handleFastIntegrate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!fastForm.name || !fastForm.endpointPath) {
+      alert("API Name and Endpoint Path are required.");
+      return;
+    }
+
+    let parsedBody: any = {};
+    try {
+      parsedBody = JSON.parse(fastForm.bodyText || "{}");
+    } catch {
+      alert("Invalid JSON format in Request Body");
+      return;
+    }
+
+    // Convert raw JSON body into clean schema
+    const schemaObj: any = {};
+    Object.keys(parsedBody).forEach((k) => {
+      schemaObj[k] = {
+        type: typeof parsedBody[k],
+        example: parsedBody[k],
+        required: true,
+      };
+    });
+
+    try {
+      const res = await fetch("/api/internal/admin/apis", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: fastForm.name,
+          endpointPath: fastForm.endpointPath,
+          httpMethod: fastForm.httpMethod,
+          defaultCostPrice: Number(fastForm.costPrice) || 0,
+          defaultSellPrice: Number(fastForm.sellPrice) || 2.5,
+          requestSchema: JSON.stringify(schemaObj),
+          responseSchema: JSON.stringify({ status: "SUCCESS", result: parsedBody }),
+          categoryId: fastForm.categoryId || undefined,
+        }),
+      });
+
+      const data = await res.json();
+      if (res.ok) {
+        alert("API Endpoint integrated successfully into Colladome Gateway!");
+        setActiveTab("catalog");
+        fetchData();
+      } else {
+        alert(data.error || "Failed to integrate API");
+      }
+    } catch (err: any) {
+      alert("Error: " + err.message);
+    }
+  };
 
   // Provider Edit Modal State
   const [selectedProvider, setSelectedProvider] = useState<any | null>(null);
@@ -336,188 +405,373 @@ export default function AdminApisPage() {
 
       {/* Tab 2: Add API Form */}
       {activeTab === "create" && (
-        <form onSubmit={handleCreateApi} className="bg-white rounded-xl border border-neutral-200 p-6 shadow-sm space-y-6">
-          <div className="pb-3 border-b border-neutral-100">
-            <h2 className="font-bold text-sm text-neutral-900">Add New API & Route to Colladome Gateway</h2>
-            <p className="text-xs text-neutral-500">
-              Paste upstream provider URL and payload. Colladome automatically binds it to your domain!
-            </p>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs font-semibold text-neutral-700 mb-1">Category *</label>
-              <select
-                value={form.categoryId}
-                onChange={(e) => setForm({ ...form, categoryId: e.target.value })}
-                className="w-full text-xs border border-neutral-300 rounded-lg p-2.5 bg-white focus:outline-none focus:border-neutral-500"
-              >
-                {categories.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-xs font-semibold text-neutral-700 mb-1">API Display Name *</label>
-              <input
-                type="text"
-                required
-                placeholder="e.g. Passport Verification Suite"
-                value={form.name}
-                onChange={(e) => setForm({ ...form, name: e.target.value })}
-                className="w-full text-xs border border-neutral-300 rounded-lg p-2.5 focus:outline-none focus:border-neutral-500"
-              />
-            </div>
-
-            <div>
-              <label className="block text-xs font-semibold text-neutral-700 mb-1">Colladome Gateway Endpoint Path *</label>
-              <input
-                type="text"
-                required
-                placeholder="/v1/verification/passport"
-                value={form.endpointPath}
-                onChange={(e) => setForm({ ...form, endpointPath: e.target.value })}
-                className="w-full text-xs font-mono text-neutral-900 font-semibold border border-neutral-300 rounded-lg p-2.5 focus:outline-none focus:border-neutral-500"
-              />
-            </div>
-
-            <div>
-              <label className="block text-xs font-semibold text-neutral-700 mb-1">HTTP Method</label>
-              <select
-                value={form.httpMethod}
-                onChange={(e) => setForm({ ...form, httpMethod: e.target.value })}
-                className="w-full text-xs border border-neutral-300 rounded-lg p-2.5 bg-white font-bold"
-              >
-                <option value="POST">POST</option>
-                <option value="GET">GET</option>
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-xs font-semibold text-neutral-700 mb-1">
-                Cost Price (Paid to Provider) (₹) *
-              </label>
-              <input
-                type="number"
-                step="0.01"
-                required
-                value={form.defaultCostPrice}
-                onChange={(e) => setForm({ ...form, defaultCostPrice: Number(e.target.value) })}
-                className="w-full text-xs border border-neutral-300 rounded-lg p-2.5 font-bold"
-              />
-            </div>
-
-            <div>
-              <label className="block text-xs font-semibold text-neutral-700 mb-1">
-                Retail Selling Price (Client Debit) (₹) *
-              </label>
-              <input
-                type="number"
-                step="0.01"
-                required
-                value={form.defaultSellPrice}
-                onChange={(e) => setForm({ ...form, defaultSellPrice: Number(e.target.value) })}
-                className="w-full text-xs border border-neutral-300 rounded-lg p-2.5 font-bold text-neutral-900"
-              />
-            </div>
-          </div>
-
-          {/* Upstream Provider Mapping Box */}
-          <div className="bg-neutral-50 p-4 rounded-xl border border-neutral-200 space-y-4">
-            <h3 className="text-xs font-bold text-neutral-900 uppercase flex items-center gap-1.5">
-              <Cpu className="w-4 h-4 text-neutral-700" />
-              <span>Multi-Provider Routing & Redundancy</span>
-            </h3>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-xs font-semibold text-neutral-700 mb-1">Primary Upstream Provider</label>
-                <select
-                  value={form.primaryProviderId}
-                  onChange={(e) => setForm({ ...form, primaryProviderId: e.target.value })}
-                  className="w-full text-xs border border-neutral-300 rounded-lg p-2 bg-white font-semibold"
-                >
-                  {providers.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.name} ({p.code})
-                    </option>
-                  ))}
-                </select>
-                <input
-                  type="text"
-                  placeholder="Primary Provider URL Endpoint (e.g. /api/v1/in/identity/passport)"
-                  value={form.primaryEndpoint}
-                  onChange={(e) => setForm({ ...form, primaryEndpoint: e.target.value })}
-                  className="w-full mt-2 text-xs font-mono border border-neutral-300 rounded-lg p-2"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-neutral-700 mb-1">
-                  Secondary Fallback Provider (Auto Failover)
-                </label>
-                <select
-                  value={form.secondaryProviderId}
-                  onChange={(e) => setForm({ ...form, secondaryProviderId: e.target.value })}
-                  className="w-full text-xs border border-neutral-300 rounded-lg p-2 bg-white font-semibold"
-                >
-                  <option value="">None (Single Provider)</option>
-                  {providers.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.name} ({p.code})
-                    </option>
-                  ))}
-                </select>
-                <input
-                  type="text"
-                  placeholder="Fallback Endpoint (e.g. /v3/tasks/verify/passport)"
-                  value={form.secondaryEndpoint}
-                  onChange={(e) => setForm({ ...form, secondaryEndpoint: e.target.value })}
-                  className="w-full mt-2 text-xs font-mono border border-neutral-300 rounded-lg p-2"
-                />
-              </div>
-            </div>
-          </div>
-
-          {/* JSON Schemas */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs font-semibold text-neutral-700 mb-1">
-                Client Request Parameters Schema (JSON)
-              </label>
-              <textarea
-                rows={5}
-                value={form.requestSchemaText}
-                onChange={(e) => setForm({ ...form, requestSchemaText: e.target.value })}
-                className="w-full font-mono text-xs border border-neutral-300 rounded-lg p-2.5 text-neutral-900"
-              ></textarea>
-            </div>
-
-            <div>
-              <label className="block text-xs font-semibold text-neutral-700 mb-1">
-                Standard Sanitized Response Schema (JSON)
-              </label>
-              <textarea
-                rows={5}
-                value={form.responseSchemaText}
-                onChange={(e) => setForm({ ...form, responseSchemaText: e.target.value })}
-                className="w-full font-mono text-xs border border-neutral-300 rounded-lg p-2.5 text-neutral-900"
-              ></textarea>
-            </div>
-          </div>
-
-          <div className="flex justify-end gap-3 pt-4 border-t border-neutral-150">
+        <div className="bg-white rounded-xl border border-neutral-200 shadow-sm overflow-hidden space-y-6">
+          {/* Mode Switcher */}
+          <div className="flex border-b border-neutral-200 bg-neutral-50/80 p-1.5 gap-1.5">
             <button
-              type="submit"
-              className="px-6 py-2.5 rounded-lg bg-black hover:bg-neutral-800 text-white font-semibold text-xs transition"
+              type="button"
+              onClick={() => setFastMode("fast")}
+              className={`px-4 py-2 rounded-lg text-xs font-bold transition flex items-center gap-1.5 ${
+                fastMode === "fast"
+                  ? "bg-black text-white shadow-sm"
+                  : "text-neutral-600 hover:text-neutral-900"
+              }`}
             >
-              Deploy API to Gateway
+              <Zap className="w-3.5 h-3.5 text-amber-400" />
+              <span>⚡ Fast Raw Integrator (Paste Mode)</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setFastMode("advanced")}
+              className={`px-4 py-2 rounded-lg text-xs font-bold transition flex items-center gap-1.5 ${
+                fastMode === "advanced"
+                  ? "bg-black text-white shadow-sm"
+                  : "text-neutral-600 hover:text-neutral-900"
+              }`}
+            >
+              <Sliders className="w-3.5 h-3.5 text-blue-400" />
+              <span>Advanced Multi-Provider Config</span>
             </button>
           </div>
-        </form>
+
+          {fastMode === "fast" ? (
+            /* Fast Raw Integrator */
+            <form onSubmit={handleFastIntegrate} className="p-6 space-y-6">
+              <div className="pb-3 border-b border-neutral-100">
+                <h2 className="font-bold text-sm text-neutral-900 flex items-center gap-2">
+                  <Zap className="w-4 h-4 text-amber-500" />
+                  <span>Fast Raw Endpoint Integrator</span>
+                </h2>
+                <p className="text-xs text-neutral-500 mt-0.5">
+                  Paste the provider URL, headers, and request body. Colladome automatically generates the gateway contract and handles authentication!
+                </p>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-neutral-800 mb-1">API Display Name *</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. PAN Detailed Verification"
+                    value={fastForm.name}
+                    onChange={(e) => setFastForm({ ...fastForm, name: e.target.value })}
+                    className="w-full text-xs border border-neutral-300 rounded-lg p-2.5 focus:outline-none focus:border-black font-semibold text-neutral-900"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-neutral-800 mb-1">Category (Optional / Map Later)</label>
+                  <select
+                    value={fastForm.categoryId}
+                    onChange={(e) => setFastForm({ ...fastForm, categoryId: e.target.value })}
+                    className="w-full text-xs border border-neutral-300 rounded-lg p-2.5 bg-white text-neutral-800"
+                  >
+                    <option value="">Auto-Assign / Map Later</option>
+                    {categories.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-neutral-800 mb-1">Provider Base URL *</label>
+                  <input
+                    type="url"
+                    required
+                    placeholder="https://api.zoop.one"
+                    value={fastForm.baseUrl}
+                    onChange={(e) => setFastForm({ ...fastForm, baseUrl: e.target.value })}
+                    className="w-full text-xs font-mono border border-neutral-300 rounded-lg p-2.5 focus:outline-none focus:border-black"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-neutral-800 mb-1">Endpoint Path *</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="/api/v1/in/identity/pan"
+                    value={fastForm.endpointPath}
+                    onChange={(e) => setFastForm({ ...fastForm, endpointPath: e.target.value })}
+                    className="w-full text-xs font-mono border border-neutral-300 rounded-lg p-2.5 focus:outline-none focus:border-black font-bold text-neutral-900"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-neutral-800 mb-1">HTTP Method</label>
+                  <div className="flex gap-2">
+                    {["POST", "GET"].map((m) => (
+                      <button
+                        key={m}
+                        type="button"
+                        onClick={() => setFastForm({ ...fastForm, httpMethod: m })}
+                        className={`px-4 py-2 rounded-lg text-xs font-bold transition flex-1 ${
+                          fastForm.httpMethod === m
+                            ? "bg-black text-white"
+                            : "bg-neutral-100 text-neutral-700 hover:bg-neutral-200"
+                        }`}
+                      >
+                        {m}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="block text-xs font-bold text-neutral-800 mb-1">Cost Price (₹)</label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={fastForm.costPrice}
+                      onChange={(e) => setFastForm({ ...fastForm, costPrice: parseFloat(e.target.value) || 0 })}
+                      className="w-full text-xs border border-neutral-300 rounded-lg p-2.5 font-bold"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-neutral-800 mb-1">Retail Sell Price (₹)</label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={fastForm.sellPrice}
+                      onChange={(e) => setFastForm({ ...fastForm, sellPrice: parseFloat(e.target.value) || 0 })}
+                      className="w-full text-xs border border-neutral-300 rounded-lg p-2.5 font-bold text-neutral-900"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Raw JSON Paste Blocks */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-neutral-800 mb-1">
+                    Provider Request Headers (Paste JSON)
+                  </label>
+                  <textarea
+                    rows={5}
+                    value={fastForm.headersText}
+                    onChange={(e) => setFastForm({ ...fastForm, headersText: e.target.value })}
+                    className="w-full font-mono text-xs border border-neutral-300 rounded-lg p-2.5 text-neutral-900 bg-neutral-50"
+                  />
+                  <p className="text-[11px] text-neutral-400 mt-1">
+                    Paste upstream provider keys/tokens. Colladome encrypts and stores these securely.
+                  </p>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-neutral-800 mb-1">
+                    Sample Request Parameters Body (Paste JSON)
+                  </label>
+                  <textarea
+                    rows={5}
+                    value={fastForm.bodyText}
+                    onChange={(e) => setFastForm({ ...fastForm, bodyText: e.target.value })}
+                    className="w-full font-mono text-xs border border-neutral-300 rounded-lg p-2.5 text-neutral-900 bg-neutral-50"
+                  />
+                  <p className="text-[11px] text-neutral-400 mt-1">
+                    Colladome automatically parses this into parameter specs for your clients!
+                  </p>
+                </div>
+              </div>
+
+              {/* Colladome Gateway Contract Box */}
+              <div className="bg-[#09090b] text-white p-5 rounded-xl border border-neutral-800 space-y-3 font-mono text-xs">
+                <div className="font-bold text-emerald-400 flex items-center gap-2">
+                  <ShieldCheck className="w-4 h-4 text-emerald-400" />
+                  <span>How Colladome Wraps This Endpoint:</span>
+                </div>
+                <div className="space-y-1.5 text-neutral-300 text-[11px] leading-relaxed">
+                  <div>
+                    <strong>1. Client Calls:</strong>{" "}
+                    <code className="text-white bg-black px-1.5 py-0.5 rounded">
+                      {fastForm.httpMethod} https://api.colladome.com{fastForm.endpointPath.startsWith("/") ? fastForm.endpointPath : `/${fastForm.endpointPath}`}
+                    </code>
+                  </div>
+                  <div>
+                    <strong>2. Required Headers:</strong>{" "}
+                    <code className="text-white">x-api-key: cd_live_...</code> and optional{" "}
+                    <code className="text-white">x-client-order-id: (order_ref)</code>
+                  </div>
+                  <div>
+                    <strong>3. Gateway Checks:</strong> Validates client IP against authorized whitelist, verifies wallet balance ≥ ₹{fastForm.sellPrice.toFixed(2)}, and deducts wallet atomically.
+                  </div>
+                  <div>
+                    <strong>4. Upstream Forwarding:</strong> Gateway injects decrypted provider headers and proxies payload to{" "}
+                    <code className="text-amber-300">{fastForm.baseUrl}{fastForm.endpointPath}</code>.
+                  </div>
+                  <div>
+                    <strong>5. Real-Time Logging:</strong> Logs latency, HTTP status, and responses for audit trail.
+                  </div>
+                </div>
+              </div>
+
+              {/* Submit Button */}
+              <div className="flex justify-end pt-2">
+                <button
+                  type="submit"
+                  className="px-6 py-3 rounded-xl bg-black hover:bg-neutral-800 text-white font-bold text-xs shadow-md transition flex items-center gap-2"
+                >
+                  <Zap className="w-4 h-4 text-amber-400" />
+                  <span>⚡ Deploy & Integrate Endpoint into Gateway</span>
+                </button>
+              </div>
+            </form>
+          ) : (
+            /* Advanced Multi-Provider Config */
+            <form onSubmit={handleCreateApi} className="p-6 space-y-6">
+              <div className="pb-3 border-b border-neutral-100">
+                <h2 className="font-bold text-sm text-neutral-900">Advanced Multi-Provider Routing & Fallback</h2>
+                <p className="text-xs text-neutral-500">
+                  Configure primary and secondary failover providers with custom response mapping.
+                </p>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-neutral-700 mb-1">Category *</label>
+                  <select
+                    value={form.categoryId}
+                    onChange={(e) => setForm({ ...form, categoryId: e.target.value })}
+                    className="w-full text-xs border border-neutral-300 rounded-lg p-2.5 bg-white"
+                  >
+                    {categories.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-neutral-700 mb-1">API Display Name *</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. Passport Verification Suite"
+                    value={form.name}
+                    onChange={(e) => setForm({ ...form, name: e.target.value })}
+                    className="w-full text-xs border border-neutral-300 rounded-lg p-2.5"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-neutral-700 mb-1">Colladome Endpoint Path *</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="/v1/verification/passport"
+                    value={form.endpointPath}
+                    onChange={(e) => setForm({ ...form, endpointPath: e.target.value })}
+                    className="w-full text-xs font-mono border border-neutral-300 rounded-lg p-2.5"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-neutral-700 mb-1">HTTP Method</label>
+                  <select
+                    value={form.httpMethod}
+                    onChange={(e) => setForm({ ...form, httpMethod: e.target.value })}
+                    className="w-full text-xs border border-neutral-300 rounded-lg p-2.5 bg-white font-bold"
+                  >
+                    <option value="POST">POST</option>
+                    <option value="GET">GET</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-neutral-700 mb-1">Cost Price (₹)</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={form.defaultCostPrice}
+                    onChange={(e) => setForm({ ...form, defaultCostPrice: Number(e.target.value) })}
+                    className="w-full text-xs border border-neutral-300 rounded-lg p-2.5"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-neutral-700 mb-1">Retail Selling Price (₹)</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={form.defaultSellPrice}
+                    onChange={(e) => setForm({ ...form, defaultSellPrice: Number(e.target.value) })}
+                    className="w-full text-xs border border-neutral-300 rounded-lg p-2.5 font-bold text-neutral-900"
+                  />
+                </div>
+              </div>
+
+              {/* Upstream Provider Mapping Box */}
+              <div className="bg-neutral-50 p-4 rounded-xl border border-neutral-200 space-y-4">
+                <h3 className="text-xs font-bold text-neutral-900 uppercase flex items-center gap-1.5">
+                  <Cpu className="w-4 h-4 text-neutral-700" />
+                  <span>Primary & Secondary Failover Providers</span>
+                </h3>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-semibold text-neutral-700 mb-1">Primary Upstream Provider</label>
+                    <select
+                      value={form.primaryProviderId}
+                      onChange={(e) => setForm({ ...form, primaryProviderId: e.target.value })}
+                      className="w-full text-xs border border-neutral-300 rounded-lg p-2 bg-white font-semibold"
+                    >
+                      {providers.map((p) => (
+                        <option key={p.id} value={p.id}>
+                          {p.name} ({p.code})
+                        </option>
+                      ))}
+                    </select>
+                    <input
+                      type="text"
+                      placeholder="Primary Provider URL Endpoint"
+                      value={form.primaryEndpoint}
+                      onChange={(e) => setForm({ ...form, primaryEndpoint: e.target.value })}
+                      className="w-full mt-2 text-xs font-mono border border-neutral-300 rounded-lg p-2"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-neutral-700 mb-1">
+                      Secondary Fallback Provider
+                    </label>
+                    <select
+                      value={form.secondaryProviderId}
+                      onChange={(e) => setForm({ ...form, secondaryProviderId: e.target.value })}
+                      className="w-full text-xs border border-neutral-300 rounded-lg p-2 bg-white font-semibold"
+                    >
+                      <option value="">None (Single Provider)</option>
+                      {providers.map((p) => (
+                        <option key={p.id} value={p.id}>
+                          {p.name} ({p.code})
+                        </option>
+                      ))}
+                    </select>
+                    <input
+                      type="text"
+                      placeholder="Fallback Endpoint"
+                      value={form.secondaryEndpoint}
+                      onChange={(e) => setForm({ ...form, secondaryEndpoint: e.target.value })}
+                      className="w-full mt-2 text-xs font-mono border border-neutral-300 rounded-lg p-2"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-3 pt-4 border-t border-neutral-150">
+                <button
+                  type="submit"
+                  className="px-6 py-2.5 rounded-lg bg-black hover:bg-neutral-800 text-white font-semibold text-xs transition"
+                >
+                  Deploy API to Gateway
+                </button>
+              </div>
+            </form>
+          )}
+        </div>
       )}
 
       {/* Tab 3: Providers */}

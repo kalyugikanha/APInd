@@ -114,8 +114,19 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const clientCount = await db.user.count({ where: { role: { in: ["CLIENT_ADMIN", "CLIENT_DEV"] } } });
-    const clientCode = `CD-${1000 + clientCount + 1}`;
+    // Generate guaranteed unique client code (e.g. CD-1002)
+    let clientCode = "";
+    for (let i = 0; i < 15; i++) {
+      const candidate = `CD-${1000 + Math.floor(1000 + Math.random() * 9000)}`;
+      const existingCode = await db.user.findUnique({ where: { clientCode: candidate } });
+      if (!existingCode) {
+        clientCode = candidate;
+        break;
+      }
+    }
+    if (!clientCode) {
+      clientCode = `CD-${Date.now().toString().slice(-6)}`;
+    }
 
     const prodKey = generateApiKey("PRODUCTION");
     const testKey = generateApiKey("SANDBOX");
@@ -150,7 +161,7 @@ export async function POST(req: NextRequest) {
           },
           clientSettings: {
             create: {
-              allowedIps: JSON.stringify(Array.isArray(allowedIps) ? allowedIps : []),
+              allowedIps: JSON.stringify(Array.isArray(allowedIps) && allowedIps.length > 0 ? allowedIps : ["*"]),
               sandboxIps: JSON.stringify(["127.0.0.1", "::1"]),
               lowBalanceAlert: Number(lowBalanceAlert) || 500,
               isLiveEnabled: true,

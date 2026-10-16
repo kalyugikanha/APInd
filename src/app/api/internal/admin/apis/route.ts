@@ -47,8 +47,25 @@ export async function POST(req: NextRequest) {
       secondaryEndpoint,
     } = body;
 
-    if (!categoryId || !name || !endpointPath || defaultCostPrice === undefined || defaultSellPrice === undefined) {
-      return NextResponse.json({ error: "Missing required API configuration fields." }, { status: 400 });
+    if (!name || !endpointPath) {
+      return NextResponse.json({ error: "API Name and Endpoint Path are required." }, { status: 400 });
+    }
+
+    let finalCategoryId = categoryId;
+    if (!finalCategoryId) {
+      const firstCat = await db.apiCategory.findFirst({ orderBy: { sortOrder: "asc" } });
+      if (firstCat) {
+        finalCategoryId = firstCat.id;
+      } else {
+        const newCat = await db.apiCategory.create({
+          data: {
+            name: "General & Identity",
+            slug: "general-identity",
+            description: "Custom and platform integrated APIs",
+          },
+        });
+        finalCategoryId = newCat.id;
+      }
     }
 
     const cleanEndpoint = endpointPath.startsWith("/") ? endpointPath : `/${endpointPath}`;
@@ -56,15 +73,15 @@ export async function POST(req: NextRequest) {
 
     const newApi = await db.api.create({
       data: {
-        categoryId,
+        categoryId: finalCategoryId,
         name,
         slug: cleanSlug,
         endpointPath: cleanEndpoint,
         httpMethod,
         description: description || name,
         useCase,
-        defaultCostPrice: Number(defaultCostPrice),
-        defaultSellPrice: Number(defaultSellPrice),
+        defaultCostPrice: Number(defaultCostPrice) || 0.0,
+        defaultSellPrice: Number(defaultSellPrice) || 2.5,
         requestSchema: typeof requestSchema === "string" ? requestSchema : JSON.stringify(requestSchema),
         responseSchema: typeof responseSchema === "string" ? responseSchema : JSON.stringify(responseSchema),
         providerMappings: {
