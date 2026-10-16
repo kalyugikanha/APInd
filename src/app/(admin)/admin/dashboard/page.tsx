@@ -152,6 +152,44 @@ export default function AdminDashboardPage() {
         ))}
       </div>
 
+      {/* 7-Day Traffic Trend Strip */}
+      {stats?.dailyVolume && stats.dailyVolume.length > 0 && (
+        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-3">
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-xs font-bold text-slate-900 uppercase tracking-wide">
+                7-Day Gateway Traffic Trend
+              </h2>
+              <p className="text-[11px] text-slate-400">
+                Daily verification requests processed across all enterprise clients
+              </p>
+            </div>
+            <span className="text-xs font-mono font-bold text-slate-700 bg-slate-100 px-2 py-0.5 rounded">
+              {stats.dailyVolume.reduce((acc: number, curr: any) => acc + curr.hits, 0)} Total Requests
+            </span>
+          </div>
+
+          <div className="grid grid-cols-7 gap-2 pt-2 items-end h-28">
+            {stats.dailyVolume.map((day: any) => {
+              const maxHits = Math.max(...stats.dailyVolume.map((d: any) => d.hits), 10);
+              const heightPct = Math.max(12, Math.round((day.hits / maxHits) * 100));
+              return (
+                <div key={day.date} className="flex flex-col items-center gap-1.5 h-full justify-end">
+                  <span className="text-[10px] font-mono text-slate-500 font-semibold">{day.hits}</span>
+                  <div
+                    style={{ height: `${heightPct}%` }}
+                    className={`w-full rounded-md transition-all ${
+                      day.hits > 0 ? "bg-slate-900" : "bg-slate-100"
+                    }`}
+                  ></div>
+                  <span className="text-[10px] font-bold text-slate-600 uppercase">{day.label}</span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {/* Sub-Navigation Underline Tabs Matching Reference Image 2 */}
       <div className="flex items-center gap-6 border-b border-slate-200 text-xs font-semibold">
         <button

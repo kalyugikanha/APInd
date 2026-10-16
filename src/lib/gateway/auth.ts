@@ -9,12 +9,16 @@ export interface AuthenticatedClient {
   accountStatus: string;
   keyType: "PRODUCTION" | "SANDBOX";
   keyName: string;
+  keyId: string;
+  rateLimitRpm: number;
   walletId: string | null;
   walletBalance: number;
   allowedIps: string[];
   pricingRules: Map<string, number>; // apiId -> customPrice
   clientOrderId: string | null;
   clientIp: string;
+  webhookUrl: string | null;
+  webhookSecret: string | null;
 }
 
 /**
@@ -61,6 +65,40 @@ export async function authenticateApiRequest(req: NextRequest): Promise<{
   const apiKey = req.headers.get("x-api-key") || req.headers.get("authorization")?.replace("Bearer ", "");
   const clientOrderId = req.headers.get("x-client-order-id") || null;
   const clientIp = extractClientIp(req);
+
+  const playgroundUserId = req.headers.get("x-playground-user-id");
+  if (playgroundUserId) {
+    const user = await db.user.findUnique({
+      where: { id: playgroundUserId },
+      include: {
+        wallet: true,
+        clientSettings: true,
+        pricingRules: true,
+      },
+    });
+    if (user && user.accountStatus === "ACTIVE") {
+      return {
+        client: {
+          userId: user.id,
+          userEmail: user.email,
+          companyName: user.companyName,
+          accountStatus: user.accountStatus,
+          keyType: "SANDBOX",
+          keyName: "Interactive Playground Session",
+          keyId: "playground_key",
+          rateLimitRpm: 600,
+          walletId: user.wallet?.id || null,
+          walletBalance: user.wallet?.balance || 0,
+          allowedIps: [],
+          pricingRules: new Map(),
+          clientOrderId: clientOrderId,
+          clientIp: "127.0.0.1",
+          webhookUrl: user.clientSettings?.webhookUrl || null,
+          webhookSecret: user.clientSettings?.webhookSecret || null,
+        },
+      };
+    }
+  }
 
   if (!apiKey) {
     return {
@@ -155,12 +193,16 @@ export async function authenticateApiRequest(req: NextRequest): Promise<{
       accountStatus: user.accountStatus,
       keyType: keyRecord.type as "PRODUCTION" | "SANDBOX",
       keyName: keyRecord.name,
+      keyId: keyRecord.id,
+      rateLimitRpm: keyRecord.rateLimitRpm || user.clientSettings?.rateLimitRpm || 120,
       walletId: user.wallet?.id || null,
       walletBalance: user.wallet?.balance || 0,
       allowedIps,
       pricingRules: pricingMap,
       clientOrderId,
       clientIp,
+      webhookUrl: user.clientSettings?.webhookUrl || null,
+      webhookSecret: user.clientSettings?.webhookSecret || null,
     },
   };
 }

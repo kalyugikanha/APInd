@@ -8,6 +8,8 @@ import {
   generateMockBankResponse,
   generateMockGstinResponse,
 } from "@/lib/gateway/mockProviders";
+import { dispatchWebhook } from "@/lib/webhooks/dispatcher";
+import { checkRateLimit } from "@/lib/gateway/rateLimiter";
 import { GatewayResponse } from "@/types";
 
 export async function handleGatewayRequest(
@@ -34,6 +36,31 @@ export async function handleGatewayRequest(
 
   const client: AuthenticatedClient = auth.client!;
   const colladomeOrderId = generateOrderId("CDO");
+
+  // 1.1 Enforce Sliding-Window Rate Limit (RPM Throttling)
+  const rateLimit = checkRateLimit(client.keyId, client.rateLimitRpm || 60);
+  if (!rateLimit.allowed) {
+    return NextResponse.json(
+      {
+        status: "ERROR",
+        colladome_order_id: colladomeOrderId,
+        timestamp: new Date().toISOString(),
+        data: null,
+        error: {
+          code: "RATE_LIMIT_EXCEEDED",
+          message: `Too many requests. Rate limit of ${rateLimit.limit} RPM exceeded. Please retry in ${rateLimit.retryAfterSeconds} seconds.`,
+        },
+      },
+      {
+        status: 429,
+        headers: {
+          "x-ratelimit-limit": String(rateLimit.limit),
+          "x-ratelimit-remaining": String(rateLimit.remaining),
+          "retry-after": String(rateLimit.retryAfterSeconds),
+        },
+      }
+    );
+  }
 
   // 2. Parse Body
   let body: any = {};
@@ -290,6 +317,31 @@ export async function handleGatewayRequest(
           },
         });
       }
+
+      // Asynchronous Webhook Event Dispatch
+      if (client.webhookUrl) {
+        const eventName = endpointPath.includes("/pan")
+          ? "identity.pan.verified"
+          : endpointPath.includes("/bank-verify")
+          ? "banking.penny_drop.completed"
+          : endpointPath.includes("/gstin-verify")
+          ? "business.gstin.verified"
+          : "verification.completed";
+
+        dispatchWebhook(
+          client.webhookUrl,
+          client.webhookSecret,
+          eventName,
+          {
+            order_id: colladomeOrderId,
+            client_order_id: client.clientOrderId,
+            endpoint: endpointPath,
+            status,
+            data: responseData,
+            completed_at: new Date().toISOString(),
+          }
+        ).catch((err) => console.warn("Background webhook dispatch failed:", err));
+      }
     } catch (logErr) {
       console.error("Error writing gateway log:", logErr);
     }
@@ -314,5 +366,11 @@ export async function handleGatewayRequest(
           },
   };
 
-  return NextResponse.json(gatewayResponse, { status: responseStatus });
+  return NextResponse.json(gatewayResponse, {
+    status: responseStatus,
+    headers: {
+      "x-ratelimit-limit": String(rateLimit.limit),
+      "x-ratelimit-remaining": String(rateLimit.remaining),
+    },
+  });
 }

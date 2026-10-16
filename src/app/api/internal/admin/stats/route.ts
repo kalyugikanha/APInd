@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 
+export const dynamic = "force-dynamic";
+
 export async function GET() {
   try {
     const [
@@ -18,7 +20,7 @@ export async function GET() {
       db.apiLog.count({ where: { status: "SUCCESS" } }),
       db.apiLog.count({ where: { status: { in: ["FAILED", "TIMEOUT", "PROVIDER_ERROR"] } } }),
       db.apiLog.findMany({
-        take: 15,
+        take: 20,
         orderBy: { createdAt: "desc" },
         include: {
           user: { select: { companyName: true, email: true, clientCode: true } },
@@ -32,7 +34,7 @@ export async function GET() {
       db.provider.findMany({ select: { id: true, name: true, code: true } }),
     ]);
 
-    // Calculate Financial totals
+    // Financial totals
     const financialSummary = await db.apiLog.aggregate({
       _sum: {
         sellPrice: true,
@@ -44,8 +46,33 @@ export async function GET() {
     const grossRevenue = financialSummary._sum.sellPrice || 0;
     const totalProviderCost = financialSummary._sum.costPrice || 0;
     const netProfitMargin = financialSummary._sum.marginProfit || 0;
-
     const successRate = totalHits > 0 ? Number(((successHits / totalHits) * 100).toFixed(1)) : 100;
+
+    // 7-Day Trend Aggregation
+    const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+    const weeklyLogs = await db.apiLog.findMany({
+      where: { createdAt: { gte: sevenDaysAgo } },
+      select: { createdAt: true, apiId: true, status: true },
+    });
+
+    // Group by Day
+    const daysMap: Record<string, { label: string; date: string; hits: number; success: number }> = {};
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date(Date.now() - i * 24 * 60 * 60 * 1000);
+      const dateKey = d.toISOString().slice(0, 10);
+      const label = d.toLocaleDateString("en-US", { weekday: "short" });
+      daysMap[dateKey] = { label, date: dateKey, hits: 0, success: 0 };
+    }
+
+    weeklyLogs.forEach((l) => {
+      const key = new Date(l.createdAt).toISOString().slice(0, 10);
+      if (daysMap[key]) {
+        daysMap[key].hits++;
+        if (l.status === "SUCCESS") daysMap[key].success++;
+      }
+    });
+
+    const dailyVolume = Object.values(daysMap);
 
     return NextResponse.json({
       summary: {
@@ -60,6 +87,7 @@ export async function GET() {
         activeClients,
         pendingClients,
       },
+      dailyVolume,
       recentHits: logs.map((log) => ({
         id: log.id,
         orderId: log.colladomeOrderId,
