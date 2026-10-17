@@ -1,0 +1,33 @@
+name: Deploy to DigitalOcean Production
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    name: Deploy to Colladome API Server
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Execute remote deploy over SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.DO_HOST }}
+          username: ${{ secrets.DO_USERNAME }}
+          key: ${{ secrets.DO_SSH_KEY }}
+          port: 22
+          script: |
+            echo "🚀 Starting Automated Deployment on DigitalOcean..."
+            cd /var/www/apicolladome
+            git pull origin main
+            npm install --production=false
+            node scripts/prepare-render.js
+            npm run build
+            pm2 reload colladome-api
+            echo "✅ Deployment successful! Latest version is live on https://api.colladome.com"
