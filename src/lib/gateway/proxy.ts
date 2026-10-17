@@ -221,7 +221,8 @@ export async function handleGatewayRequest(
     }
   }
 
-  // 7. Universal Zoop & Multi-Provider Morpher Execution (with Primary -> Secondary Failover)
+  // 6.1 Smart DB Cache & Deduplication Engine (<15ms response, ₹0 Upstream Cost, 100% Margin)
+  let isCachedHit = false;
   let responseData: any = null;
   let rawUpstreamResponse: any = null;
   let responseStatus = 200;
@@ -232,7 +233,48 @@ export async function handleGatewayRequest(
   let providerOrderId: string | null = null;
   let upstreamAttemptedAndHandled = false;
 
-  if (client.keyType === "PRODUCTION" && api.providerMappings.length > 0) {
+  if (isIfscPath && cleanIfsc) {
+    try {
+      const existingRecord = await db.bankReport.findFirst({
+        where: {
+          ifscCode: cleanIfsc,
+          status: "VERIFIED",
+          accountNumber: "IFSC_LOOKUP",
+        },
+        include: {
+          apiLog: true,
+        },
+        orderBy: {
+          createdAt: "desc",
+        },
+      });
+
+      if (existingRecord && existingRecord.apiLog) {
+        let cachedData: any = null;
+        try {
+          const parsed = JSON.parse(existingRecord.apiLog.responseBody || "{}");
+          cachedData = parsed?.result || parsed?.data || parsed;
+        } catch {}
+
+        if (cachedData && (cachedData.ifsc || cachedData.bank)) {
+          responseData = cachedData;
+          status = "SUCCESS";
+          responseCode = "100";
+          responseMessage = "Valid Authentication";
+          responseStatus = 200;
+          providerOrderId = `CDO_CACHE_${existingRecord.id.slice(0, 8).toUpperCase()}`;
+          usedProviderId = existingRecord.apiLog.providerId;
+          upstreamAttemptedAndHandled = true;
+          isCachedHit = true;
+        }
+      }
+    } catch (cacheErr: any) {
+      console.warn("DB Cache lookup failed, proceeding to live provider:", cacheErr?.message);
+    }
+  }
+
+  // 7. Universal Zoop & Multi-Provider Morpher Execution (with Primary -> Secondary Failover)
+  if (!isCachedHit && client.keyType === "PRODUCTION" && api.providerMappings.length > 0) {
     for (const mapping of api.providerMappings) {
       const provider = mapping.provider;
       if (!provider || !provider.isActive) continue;
@@ -265,9 +307,16 @@ export async function handleGatewayRequest(
       const endpointPart =
         mapping.providerEndpoint ||
         (isIfscPath ? "/api/v1/in/utility/ifsc/lite" : strippedApiPath);
+
+      // Automatic URL sanitization to prevent duplicate /api/v1 prefix
+      let cleanBase = baseUrl.replace(/\/+$/, "");
+      let cleanEndpoint = endpointPart.replace(/^\/+/, "");
+      if (cleanBase.endsWith("/api/v1") && cleanEndpoint.startsWith("api/v1/")) {
+        cleanEndpoint = cleanEndpoint.replace(/^api\/v1\//, "");
+      }
       const targetUrl = endpointPart.startsWith("http")
         ? endpointPart
-        : `${baseUrl.replace(/\/+$/, "")}/${endpointPart.replace(/^\/+/, "")}`;
+        : `${cleanBase}/${cleanEndpoint}`;
 
       // Morph Colladome consent_text -> upstream provider consent_text (e.g. via ZOOP API)
       const morphedConsentText = consentText.replace(/via Colladome API/gi, "via ZOOP API");
@@ -531,9 +580,14 @@ export async function handleGatewayRequest(
           responseBody: JSON.stringify(rawUpstreamResponse || responseData), // Full raw upstream logs
           status,
           latencyMs,
-          costPrice: client.keyType === "PRODUCTION" ? costPrice : 0,
+          costPrice: client.keyType === "PRODUCTION" ? (isCachedHit ? 0 : costPrice) : 0,
           sellPrice: client.keyType === "PRODUCTION" ? sellPrice : 0,
-          marginProfit: client.keyType === "PRODUCTION" ? marginProfit : 0,
+          marginProfit:
+            client.keyType === "PRODUCTION"
+              ? isCachedHit
+                ? sellPrice
+                : marginProfit
+              : 0,
         },
       });
 
