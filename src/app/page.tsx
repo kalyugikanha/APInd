@@ -253,7 +253,7 @@ export default function HomePage() {
               className="px-6 py-3.5 rounded-full bg-slate-950 hover:bg-black text-white font-bold text-xs shadow-lg shadow-slate-950/20 transition transform hover:-translate-y-0.5 flex items-center gap-2"
             >
               <Key className="w-4 h-4" />
-              <span>Get Instant Test API Key (₹100 Free)</span>
+              <span>Get Instant Test API Key (Free Sandbox)</span>
               <ArrowRight className="w-4 h-4" />
             </button>
 
@@ -419,11 +419,6 @@ export default function HomePage() {
                   </div>
 
                   <div className="flex items-center gap-4">
-                    <div className="text-right hidden sm:block">
-                      <div className="text-[10px] text-slate-400 uppercase font-semibold">Retail Price</div>
-                      <div className="text-sm font-bold text-slate-900">₹{api.defaultSellPrice.toFixed(2)} / hit</div>
-                    </div>
-
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
@@ -706,7 +701,7 @@ print(response.json())`}</pre>
                 </div>
                 <h3 className="text-2xl font-bold text-slate-950">Start Testing in 10 Seconds</h3>
                 <p className="text-xs text-slate-500 mt-1 mb-6">
-                  Fill your organization details to receive an instant Sandbox Key with ₹100 test balance.
+                  Fill your organization details to receive an instant Sandbox Key for trial testing.
                 </p>
 
                 <form onSubmit={handleGenerateSandboxKey} className="space-y-4">
@@ -773,7 +768,7 @@ print(response.json())`}</pre>
                 </div>
                 <h3 className="text-xl font-bold text-slate-950">Sandbox Key Generated!</h3>
                 <p className="text-xs text-slate-600">
-                  Pre-loaded with <strong>₹{sandboxResult.trialBalance}</strong> test balance.
+                  Pre-loaded with trial sandbox test credits.
                 </p>
 
                 <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl">

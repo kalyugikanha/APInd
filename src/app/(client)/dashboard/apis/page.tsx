@@ -459,7 +459,7 @@ print_r($data);`;
                   <th className="py-3.5 px-3">Category</th>
                   <th className="py-3.5 px-3">Method</th>
                   <th className="py-3.5 px-3 font-mono">Endpoint Path</th>
-                  <th className="py-3.5 px-3">Price / Hit</th>
+                  <th className="py-3.5 px-3">Pricing Tier</th>
                   <th className="py-3.5 px-3 text-center">Subscription</th>
                   <th className="py-3.5 px-4 text-right">Actions</th>
                 </tr>
@@ -492,8 +492,10 @@ print_r($data);`;
                       <td className="py-4 px-3 font-mono text-slate-800 font-semibold">
                         {api.endpointPath}
                       </td>
-                      <td className="py-4 px-3 font-bold text-slate-900">
-                        ₹{(api.defaultSellPrice || 2.5).toFixed(2)}
+                      <td className="py-4 px-3">
+                        <span className="font-mono text-xs font-semibold px-2 py-0.5 rounded bg-slate-100 text-slate-700">
+                          Pay-per-use
+                        </span>
                       </td>
                       <td className="py-4 px-3 text-center" onClick={(e) => e.stopPropagation()}>
                         <button
@@ -871,7 +873,7 @@ print_r($data);`;
             {/* Modal Footer */}
             <div className="p-4 border-t border-slate-200 bg-slate-50 flex flex-wrap items-center justify-between gap-2">
               <div className="text-xs font-semibold text-slate-600">
-                Rate: <strong className="text-slate-900">₹{(selectedApi.defaultSellPrice || 1.2).toFixed(2)}</strong> per hit
+                Billing Model: <strong className="text-slate-900">Custom Volume Contract</strong>
               </div>
               <div className="flex items-center gap-2">
                 <button

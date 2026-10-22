@@ -73,7 +73,9 @@ export default function ApisCatalogPage() {
                   <span className="font-mono text-xs font-bold px-2 py-0.5 rounded bg-slate-100 text-slate-800">
                     {api.httpMethod}
                   </span>
-                  <span className="font-bold text-xs text-emerald-600">₹{api.defaultSellPrice.toFixed(2)} / call</span>
+                  <span className="text-[11px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded">
+                    Active
+                  </span>
                 </div>
 
                 <h3 className="font-bold text-base text-slate-950 mt-3">{api.name}</h3>

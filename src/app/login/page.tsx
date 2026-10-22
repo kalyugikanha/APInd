@@ -355,8 +355,8 @@ export default function LoginPage() {
               {/* Mini visual chart */}
               <div className="bg-slate-950 p-3 rounded-xl border border-slate-800/80 space-y-2">
                 <div className="flex items-center justify-between text-[10px] text-slate-400 font-mono">
-                  <span>Initial Balance</span>
-                  <strong className="text-emerald-400">₹45,200</strong>
+                  <span>Gateway Status</span>
+                  <strong className="text-emerald-400">Operational</strong>
                 </div>
                 <div className="flex items-center justify-between text-[10px] text-slate-400 font-mono">
                   <span>Win Rate</span>
@@ -384,7 +384,7 @@ export default function LoginPage() {
               </div>
               <div className="bg-slate-950 p-4 rounded-xl border border-slate-800 text-center my-auto">
                 <div className="text-[10px] text-slate-500 uppercase font-mono">Verified API Hits</div>
-                <div className="text-2xl font-extrabold text-white mt-1">₹120,580</div>
+                <div className="text-2xl font-extrabold text-white mt-1">1,250,000+</div>
                 <div className="text-[10px] text-emerald-400 font-mono mt-0.5">✓ 100% Settle Guarantee</div>
               </div>
             </div>
