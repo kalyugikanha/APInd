@@ -31,7 +31,7 @@ export default function AboutPage() {
               In India, financial verification APIs (PAN, Bank Penny Drop, Aadhaar OKYC) frequently experience unexpected provider downtimes, schema changes, and high latency spikes from single upstream vendors.
             </p>
             <p className="text-xs sm:text-sm text-slate-600 leading-relaxed">
-              When an upstream provider like Zoop or IDFY encounters server downtime, consumer onboarding stalls. <strong>Colladome solves this through intelligent reverse proxying and automated failover</strong>, ensuring 99.9% uptime by automatically routing traffic to secondary providers.
+              When a single upstream gateway encounters server downtime, consumer onboarding stalls. <strong>Colladome solves this through intelligent reverse proxying and automated failover</strong>, ensuring 99.9% uptime by automatically routing traffic to secondary providers.
             </p>
           </div>
 

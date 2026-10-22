@@ -273,7 +273,7 @@ export async function handleGatewayRequest(
     }
   }
 
-  // 7. Universal Zoop & Multi-Provider Morpher Execution (with Primary -> Secondary Failover)
+  // 7. Universal Multi-Provider Morpher Execution (with Primary -> Secondary Failover)
   if (!isCachedHit && client.keyType === "PRODUCTION" && api.providerMappings.length > 0) {
     for (const mapping of api.providerMappings) {
       const provider = mapping.provider;
@@ -429,12 +429,12 @@ export async function handleGatewayRequest(
         responseMessage = mock.response_message || "Invalid IFSC format";
         responseStatus = 400;
       }
-      providerOrderId = `ZOOP_SIM_${Date.now()}`;
+      providerOrderId = `PROV_SIM_${Date.now()}`;
       rawUpstreamResponse = {
         ...mock,
-        task_id: `zoop_sim_task_${Date.now()}`,
-        group_id: `zoop_sim_group_${Date.now()}`,
-        request_id: `zoop_sim_req_${Date.now()}`,
+        task_id: `prov_sim_task_${Date.now()}`,
+        group_id: `prov_sim_group_${Date.now()}`,
+        request_id: `prov_sim_req_${Date.now()}`,
         metadata: { billable: "Y" },
         response_code: responseCode,
         response_message: responseMessage,
@@ -449,13 +449,13 @@ export async function handleGatewayRequest(
       responseMessage =
         status === "SUCCESS" ? "Valid Authentication" : mock.data?.message || "Invalid PAN format";
       responseStatus = status === "SUCCESS" ? 200 : 400;
-      providerOrderId = `ZOOP_PAN_${Date.now()}`;
+      providerOrderId = `PROV_PAN_${Date.now()}`;
       rawUpstreamResponse = {
         result: responseData,
         success: status === "SUCCESS",
-        task_id: `zoop_sim_task_${Date.now()}`,
-        group_id: `zoop_sim_group_${Date.now()}`,
-        request_id: `zoop_sim_req_${Date.now()}`,
+        task_id: `prov_sim_task_${Date.now()}`,
+        group_id: `prov_sim_group_${Date.now()}`,
+        request_id: `prov_sim_req_${Date.now()}`,
         metadata: { billable: status === "SUCCESS" ? "Y" : "N" },
         response_code: responseCode,
         response_message: responseMessage,
@@ -470,13 +470,13 @@ export async function handleGatewayRequest(
           ? "Valid Authentication"
           : mock.data?.message || "Invalid Bank/IFSC details";
       responseStatus = status === "SUCCESS" ? 200 : 400;
-      providerOrderId = `ZOOP_BANK_${Date.now()}`;
+      providerOrderId = `PROV_BANK_${Date.now()}`;
       rawUpstreamResponse = {
         result: responseData,
         success: status === "SUCCESS",
-        task_id: `zoop_sim_task_${Date.now()}`,
-        group_id: `zoop_sim_group_${Date.now()}`,
-        request_id: `zoop_sim_req_${Date.now()}`,
+        task_id: `prov_sim_task_${Date.now()}`,
+        group_id: `prov_sim_group_${Date.now()}`,
+        request_id: `prov_sim_req_${Date.now()}`,
         metadata: { billable: status === "SUCCESS" ? "Y" : "N" },
         response_code: responseCode,
         response_message: responseMessage,
@@ -489,19 +489,19 @@ export async function handleGatewayRequest(
       responseMessage =
         status === "SUCCESS" ? "Valid Authentication" : mock.data?.message || "Invalid GSTIN format";
       responseStatus = status === "SUCCESS" ? 200 : 400;
-      providerOrderId = `ZOOP_GST_${Date.now()}`;
+      providerOrderId = `PROV_GST_${Date.now()}`;
       rawUpstreamResponse = {
         result: responseData,
         success: status === "SUCCESS",
-        task_id: `zoop_sim_task_${Date.now()}`,
-        group_id: `zoop_sim_group_${Date.now()}`,
-        request_id: `zoop_sim_req_${Date.now()}`,
+        task_id: `prov_sim_task_${Date.now()}`,
+        group_id: `prov_sim_group_${Date.now()}`,
+        request_id: `prov_sim_req_${Date.now()}`,
         metadata: { billable: status === "SUCCESS" ? "Y" : "N" },
         response_code: responseCode,
         response_message: responseMessage,
       };
     } else {
-      // Dynamic Schema-Driven Simulation for any custom Zoop API pasted via Admin Studio
+      // Dynamic Schema-Driven Simulation for any custom API pasted via Admin Studio
       let schemaResult: any = {
         verified: true,
         message: "Verified successfully",
@@ -527,13 +527,13 @@ export async function handleGatewayRequest(
       responseMessage = "Valid Authentication";
       responseStatus = 200;
       responseData = schemaResult;
-      providerOrderId = `ZOOP_CUSTOM_${Date.now()}`;
+      providerOrderId = `PROV_CUSTOM_${Date.now()}`;
       rawUpstreamResponse = {
         result: responseData,
         success: true,
-        task_id: `zoop_sim_task_${Date.now()}`,
-        group_id: `zoop_sim_group_${Date.now()}`,
-        request_id: `zoop_sim_req_${Date.now()}`,
+        task_id: `prov_sim_task_${Date.now()}`,
+        group_id: `prov_sim_group_${Date.now()}`,
+        request_id: `prov_sim_req_${Date.now()}`,
         metadata: { billable: "Y" },
         response_code: "100",
         response_message: "Valid Authentication",
@@ -557,7 +557,7 @@ export async function handleGatewayRequest(
   }
 
   // 9. Asynchronous Internal Audit Logging & Report Generation
-  // Zoop's raw vendor IDs (task_id, group_id, request_id, metadata) are stored strictly inside db.apiLog
+  // Upstream raw vendor IDs (task_id, group_id, request_id, metadata) are stored strictly inside db.apiLog
   const logPromise = (async () => {
     try {
       const log = await db.apiLog.create({
@@ -567,7 +567,7 @@ export async function handleGatewayRequest(
           userId: client.userId,
           apiId: api.id,
           providerId: usedProviderId,
-          providerOrderId, // Raw Zoop task_id / request_id
+          providerOrderId, // Raw upstream task_id / request_id
           ipAddress: client.clientIp,
           endpointPath: strippedApiPath,
           httpMethod: method,

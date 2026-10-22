@@ -68,7 +68,7 @@ export default function AdminLogsPage() {
         "Client Company": l.user?.companyName || l.user?.email || "-",
         "Client Code": l.user?.clientCode || "-",
         "Gateway Endpoint": l.endpointPath,
-        "Upstream Provider": l.provider?.name || "Zoop.one",
+        "Upstream Provider": l.provider?.name || "Primary Gateway",
         "Vendor Task ID": parsedRaw.task_id || l.providerOrderId || "-",
         "Vendor Group ID": parsedRaw.group_id || "-",
         "Vendor Request ID": parsedRaw.request_id || "-",
@@ -125,7 +125,7 @@ export default function AdminLogsPage() {
           <div>
             <h3 className="text-lg font-bold flex items-center gap-2">
               <Terminal className="w-4 h-4 text-emerald-400" />
-              <span>Zoop Morpher &amp; Gateway Transaction Audit Inspector</span>
+              <span>Upstream Morpher &amp; Gateway Transaction Audit Inspector</span>
             </h3>
             <p className="text-xs text-slate-400 font-mono mt-1">
               Colladome Order: <span className="text-white font-bold">{selectedLog.colladomeOrderId}</span> • Client Order ID:{" "}
@@ -134,7 +134,7 @@ export default function AdminLogsPage() {
             </p>
           </div>
 
-          {/* Upstream Zoop Vendor Audit Metadata Card */}
+          {/* Upstream Gateway Vendor Audit Metadata Card */}
           <div className="bg-slate-950 p-4 rounded-xl border border-slate-800 space-y-3 text-xs font-mono">
             <div className="flex items-center justify-between border-b border-slate-800/80 pb-2">
               <span className="text-[11px] uppercase font-bold text-amber-400 flex items-center gap-1.5">
@@ -142,25 +142,25 @@ export default function AdminLogsPage() {
                 <span>Internal Upstream Provider Metadata (Hidden from Client)</span>
               </span>
               <span className="px-2 py-0.5 rounded bg-slate-900 border border-slate-700 text-slate-300 text-[10px]">
-                Provider: {selectedLog.provider?.name || "Zoop.one"}
+                Provider: {selectedLog.provider?.name || "Primary Gateway"}
               </span>
             </div>
 
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-[11px]">
               <div className="bg-slate-900/70 p-2.5 rounded-lg border border-slate-800">
-                <div className="text-[10px] text-slate-400 uppercase">Zoop task_id</div>
+                <div className="text-[10px] text-slate-400 uppercase">Gateway task_id</div>
                 <div className="text-amber-300 font-bold truncate mt-0.5">
                   {rawVendorObj.task_id || selectedLog.providerOrderId || "-"}
                 </div>
               </div>
               <div className="bg-slate-900/70 p-2.5 rounded-lg border border-slate-800">
-                <div className="text-[10px] text-slate-400 uppercase">Zoop group_id</div>
+                <div className="text-[10px] text-slate-400 uppercase">Gateway group_id</div>
                 <div className="text-slate-200 font-bold truncate mt-0.5">
                   {rawVendorObj.group_id || "-"}
                 </div>
               </div>
               <div className="bg-slate-900/70 p-2.5 rounded-lg border border-slate-800">
-                <div className="text-[10px] text-slate-400 uppercase">Zoop request_id</div>
+                <div className="text-[10px] text-slate-400 uppercase">Gateway request_id</div>
                 <div className="text-slate-200 font-bold truncate mt-0.5">
                   {rawVendorObj.request_id || "-"}
                 </div>
@@ -215,7 +215,7 @@ export default function AdminLogsPage() {
         <div>
           <h1 className="text-2xl font-bold text-slate-900 tracking-tight">API Hit Logs &amp; Audit Inspector</h1>
           <p className="text-xs text-slate-500 mt-1">
-            Real-time Zoop vendor metadata audit (`task_id`, `group_id`, `request_id`, `billable`), client order IDs, and margin inspector
+            Real-time upstream gateway metadata audit (`task_id`, `group_id`, `request_id`, `billable`), client order IDs, and margin inspector
           </p>
         </div>
 
@@ -243,7 +243,7 @@ export default function AdminLogsPage() {
           <Search className="w-4 h-4 absolute left-3 top-2.5 text-slate-400" />
           <input
             type="text"
-            placeholder="Search by Colladome Order ID, Client task_id, Zoop ID, Client, or Endpoint..."
+            placeholder="Search by Colladome Order ID, Client task_id, Gateway Order ID, Client, or Endpoint..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="w-full pl-9 pr-3 py-1.5 text-xs rounded-lg border border-slate-200 focus:outline-none focus:border-slate-900"

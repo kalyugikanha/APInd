@@ -131,13 +131,13 @@ export default function AdminDashboardPage() {
         </div>
       </div>
 
-      {/* Upstream Provider Latency Benchmark Strip */}
+      {/* Upstream Gateway Latency Benchmark Strip */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         {[
-          { name: "Zoop.one", latency: "185ms", uptime: "99.92%", role: "Primary PAN" },
-          { name: "IDFY (Baldor)", latency: "210ms", uptime: "99.88%", role: "Failover Redundant" },
-          { name: "Decentro", latency: "310ms", uptime: "99.95%", role: "Primary Bank IMPS" },
-          { name: "Surpass Data", latency: "140ms", uptime: "99.90%", role: "Primary GSTIN" },
+          { name: "Primary Gateway", latency: "185ms", uptime: "99.92%", role: "Identity Route" },
+          { name: "Secondary Gateway", latency: "210ms", uptime: "99.88%", role: "Failover Redundant" },
+          { name: "Backup Gateway", latency: "310ms", uptime: "99.95%", role: "Bank IMPS Route" },
+          { name: "Direct Route", latency: "140ms", uptime: "99.90%", role: "Business Route" },
         ].map((prov) => (
           <div key={prov.name} className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-sm">
             <div className="flex items-center justify-between">

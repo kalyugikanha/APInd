@@ -1,8 +1,8 @@
 /**
- * Official IFSC Code Verification API definition (Zoop Lite morpher).
+ * Official IFSC Code Verification API definition.
  * Shared by the full seed (fresh DB) and the non-destructive catalog sync (existing DB).
  */
-export function ifscApiData(categoryId: string, zoopProviderId: string) {
+export function ifscApiData(categoryId: string, primaryProviderId: string) {
   return {
     categoryId,
     name: "IFSC Code Verification",
@@ -65,7 +65,7 @@ export function ifscApiData(categoryId: string, zoopProviderId: string) {
     providerMappings: {
       create: [
         {
-          providerId: zoopProviderId,
+          providerId: primaryProviderId,
           providerEndpoint: "/api/v1/in/utility/ifsc/lite",
           providerMethod: "POST",
           priority: 1,

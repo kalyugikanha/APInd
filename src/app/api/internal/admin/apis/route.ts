@@ -105,14 +105,14 @@ export async function POST(req: NextRequest) {
         .replace(/[^a-z0-9]+/g, "-")
         .replace(/^-|-$/g, "");
 
-    // Resolve upstream provider (default to ZOOP if not explicitly passed)
+    // Resolve upstream provider (default to first active provider if not explicitly passed)
     let resolvedPrimaryProviderId = primaryProviderId;
     if (!resolvedPrimaryProviderId) {
-      const zoop = await db.provider.findFirst({
-        where: { OR: [{ code: "ZOOP" }, { isActive: true }] },
+      const primaryProv = await db.provider.findFirst({
+        where: { isActive: true },
         orderBy: { createdAt: "asc" },
       });
-      if (zoop) resolvedPrimaryProviderId = zoop.id;
+      if (primaryProv) resolvedPrimaryProviderId = primaryProv.id;
     }
 
     // Extract providerEndpoint from upstreamUrl if provided

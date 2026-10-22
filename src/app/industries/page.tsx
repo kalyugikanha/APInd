@@ -40,7 +40,7 @@ export default function IndustriesPage() {
       badge: "High Redundancy & Redundancy",
       headline: "Mission-Critical Payment Validation with Multi-Provider Failover",
       painPoints: "Single upstream provider outages cause mass transaction drops and client dissatisfaction.",
-      solution: "Colladome automatically balances traffic across Decentro, IDFY, and Zoop. If Decentro experiences a latency spike, the request is seamlessly fulfilled by IDFY with zero disruption.",
+      solution: "Colladome automatically balances traffic across primary and secondary banking gateways. If a primary gateway experiences a latency spike, the request is seamlessly fulfilled by backup routes with zero disruption.",
       apisUsed: ["Bank Penny Drop Verification", "UPI Account Lookup", "GSTIN Search"],
     },
     {

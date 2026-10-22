@@ -124,7 +124,7 @@ export default function AdminChargesPage() {
                 <th className="p-3.5">Category</th>
                 <th className="p-3.5">Colladome Morphed Endpoint</th>
                 <th className="p-3.5">Upstream Route</th>
-                <th className="p-3.5">Base Cost (Zoop/IDFY) (₹)</th>
+                <th className="p-3.5">Base Upstream Cost (₹)</th>
                 <th className="p-3.5">Retail Sell Price (₹)</th>
                 <th className="p-3.5">Standard Net Margin (₹)</th>
                 <th className="p-3.5 text-right">Action</th>
@@ -153,7 +153,7 @@ export default function AdminChargesPage() {
                         {api.endpointPath.endsWith("/") ? api.endpointPath : `${api.endpointPath}/`}
                       </td>
                       <td className="p-3.5 font-mono text-[11px] text-slate-500">
-                        <div>{primaryMapping?.provider?.name || "Zoop.one"}</div>
+                        <div>{primaryMapping?.provider?.name || "Primary Gateway"}</div>
                         <div className="text-[10px] text-slate-400 truncate max-w-[180px]">
                           {primaryMapping?.providerEndpoint || "-"}
                         </div>

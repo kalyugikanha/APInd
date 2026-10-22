@@ -61,7 +61,7 @@ async function syncCatalog() {
   if (!zoop) {
     zoop = await prisma.provider.create({
       data: {
-        name: "Zoop.one",
+        name: "Primary Gateway",
         code: "ZOOP",
         baseUrl: "https://test.zoop.one",
         authType: "HEADER_API_KEY",
@@ -182,7 +182,7 @@ async function main() {
   // 3. Official Upstream Providers
   const provZoop = await prisma.provider.create({
     data: {
-      name: "Zoop.one",
+      name: "Primary Gateway",
       code: "ZOOP",
       baseUrl: "https://test.zoop.one",
       authType: "HEADER_API_KEY",
@@ -199,7 +199,7 @@ async function main() {
 
   const provIdfy = await prisma.provider.create({
     data: {
-      name: "IDFY (Baldor)",
+      name: "Secondary Gateway",
       code: "IDFY",
       baseUrl: "https://api.idfy.com",
       authType: "BEARER_TOKEN",
@@ -210,7 +210,7 @@ async function main() {
 
   const provDecentro = await prisma.provider.create({
     data: {
-      name: "Decentro Tech",
+      name: "Backup Gateway",
       code: "DECENTRO",
       baseUrl: "https://api.decentro.tech",
       authType: "HEADER_API_KEY",
@@ -221,7 +221,7 @@ async function main() {
 
   const provSurpass = await prisma.provider.create({
     data: {
-      name: "Surpass Data",
+      name: "Direct Route",
       code: "SURPASS",
       baseUrl: "https://api.surpass.in",
       authType: "HEADER_API_KEY",
@@ -229,10 +229,9 @@ async function main() {
       isActive: true,
     },
   });
-  console.log("✅ Upstream providers initialized (Zoop.one, IDFY, Decentro, Surpass).");
+  console.log("✅ Upstream providers initialized (Primary Gateway, Secondary Gateway, Backup Gateway, Direct Route).");
 
-  // 4. Official Real Gateway API: IFSC Code Verification (Zoop Lite API Morpher)
-  // Dummy APIs (PAN, Bank Penny Drop, GSTIN) are completely removed!
+  // 4. Official Real Gateway API: IFSC Code Verification
   const apiIfsc = await prisma.api.create({ data: ifscApiData(catBanking.id, provZoop.id) });
   console.log(`✅ Production Gateway API initialized: ${apiIfsc.name} (${apiIfsc.endpointPath})`);
 
@@ -242,7 +241,7 @@ async function main() {
   console.log("Super Admin Login: admin@colladome.com");
   console.log("Password:          Admin@123");
   console.log("Gateway API:       POST /ifsc-verification/v1");
-  console.log("Base Cost:         ₹0.50 (Zoop Lite)");
+  console.log("Base Cost:         ₹0.50");
   console.log("Retail Sell Price: ₹1.20");
   console.log("Clients:           0 (Ready for real enterprise registrations)");
   console.log("--------------------------------------------------");

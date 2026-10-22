@@ -349,7 +349,7 @@ export default function LoginPage() {
               <div>
                 <div className="text-xs font-bold text-white">99.9% Redundancy</div>
                 <div className="text-[11px] text-slate-400 mt-0.5">
-                  Multi-provider failover across Zoop, IDFY & Decentro.
+                  Multi-gateway failover across primary and secondary banking routes.
                 </div>
               </div>
               {/* Mini visual chart */}
@@ -406,13 +406,13 @@ export default function LoginPage() {
             </div>
           </div>
 
-          {/* Partner Trust Strip */}
+          {/* Network & Registry Strip */}
           <div className="pt-4 border-t border-slate-800/80 flex items-center justify-between text-xs text-slate-500 font-mono relative z-10">
-            <span>ZOOP.ONE</span>
-            <span>IDFY</span>
-            <span>DECENTRO</span>
-            <span>SURPASS</span>
-            <span>UIDAI</span>
+            <span>NPCI / IMPS</span>
+            <span>BANKING NETWORKS</span>
+            <span>INCOME TAX REGISTRY</span>
+            <span>MCA PORTAL</span>
+            <span>GST NETWORK</span>
           </div>
         </div>
       </div>

@@ -312,7 +312,7 @@ print_r($data);`;
         _postman_id: "c011ad0m-e001-4000-8000-ifscgateway01",
         name: "Colladome Enterprise API Gateway (v2.1)",
         description:
-          "Official Colladome API Collection with Query Parameter Authentication (?api_key=...), Zoop IFSC Verification Lite Morpher, and automated response assertions.",
+          "Official Colladome API Collection with Query Parameter Authentication (?api_key=...), IFSC Verification Gateway, and automated response assertions.",
         schema: "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
       },
       variable: [

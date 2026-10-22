@@ -26,13 +26,13 @@ import {
   Sparkles,
 } from "lucide-react";
 
-const ZOOP_PRESETS = [
+const GATEWAY_PRESETS = [
   {
     id: "ifsc",
-    label: "Zoop IFSC Lite",
-    name: "IFSC Code Verification (Zoop Lite)",
+    label: "IFSC Verification",
+    name: "IFSC Code Verification",
     colladomePath: "/ifsc-verification/v1/",
-    upstreamUrl: "https://test.zoop.one/api/v1/in/utility/ifsc/lite",
+    upstreamUrl: "https://api.upstream-provider.com/api/v1/in/utility/ifsc/lite",
     httpMethod: "POST",
     costPrice: 0.5,
     sellPrice: 1.2,
@@ -44,7 +44,7 @@ const ZOOP_PRESETS = [
           ifsc: "THRS0000XXX",
           consent: "Y",
           consent_text:
-            "I hear by declare my consent agreement for fetching my information via ZOOP API",
+            "I hear by declare my consent agreement for fetching my information via Colladome API",
         },
         task_id: "f26eb21e-4c35-4491-b2d5-41fa0e545a34",
       },
@@ -81,10 +81,10 @@ const ZOOP_PRESETS = [
   },
   {
     id: "pan",
-    label: "Zoop PAN Lite",
-    name: "PAN Detailed Verification (Zoop Lite)",
+    label: "PAN Verification",
+    name: "PAN Detailed Verification",
     colladomePath: "/pan-verification/v1/",
-    upstreamUrl: "https://test.zoop.one/api/v1/in/identity/pan/lite",
+    upstreamUrl: "https://api.upstream-provider.com/api/v1/in/identity/pan/lite",
     httpMethod: "POST",
     costPrice: 1.2,
     sellPrice: 2.2,
@@ -96,7 +96,7 @@ const ZOOP_PRESETS = [
           customer_pan_number: "ABCDE1234F",
           consent: "Y",
           consent_text:
-            "I hear by declare my consent agreement for fetching my information via ZOOP API",
+            "I hear by declare my consent agreement for fetching my information via Colladome API",
         },
         task_id: "f26eb21e-4c35-4491-b2d5-41fa0e545a34",
       },
@@ -123,10 +123,10 @@ const ZOOP_PRESETS = [
   },
   {
     id: "bav",
-    label: "Zoop Bank Penny Drop",
-    name: "Bank Account Penny Drop (Zoop BAV Lite)",
+    label: "Bank Penny Drop",
+    name: "Bank Account Penny Drop",
     colladomePath: "/bank-verification/v1/",
-    upstreamUrl: "https://test.zoop.one/api/v1/in/financial/bav/lite",
+    upstreamUrl: "https://api.upstream-provider.com/api/v1/in/financial/bav/lite",
     httpMethod: "POST",
     costPrice: 1.8,
     sellPrice: 3.0,
@@ -140,7 +140,7 @@ const ZOOP_PRESETS = [
           beneficiary_name: "RAHUL SHARMA",
           consent: "Y",
           consent_text:
-            "I hear by declare my consent agreement for fetching my information via ZOOP API",
+            "I hear by declare my consent agreement for fetching my information via Colladome API",
         },
         task_id: "f26eb21e-4c35-4491-b2d5-41fa0e545a34",
       },
@@ -167,10 +167,10 @@ const ZOOP_PRESETS = [
   },
   {
     id: "gstin",
-    label: "Zoop GSTIN Lite",
-    name: "GSTIN Business Verification (Zoop Lite)",
+    label: "GSTIN Verification",
+    name: "GSTIN Business Verification",
     colladomePath: "/gstin-verification/v1/",
-    upstreamUrl: "https://test.zoop.one/api/v1/in/merchant/gstin/lite",
+    upstreamUrl: "https://api.upstream-provider.com/api/v1/in/merchant/gstin/lite",
     httpMethod: "POST",
     costPrice: 1.4,
     sellPrice: 2.5,
@@ -182,7 +182,7 @@ const ZOOP_PRESETS = [
           business_gstin_number: "27AABCU9603R1ZM",
           consent: "Y",
           consent_text:
-            "I hear by declare my consent agreement for fetching my information via ZOOP API",
+            "I hear by declare my consent agreement for fetching my information via Colladome API",
         },
         task_id: "f26eb21e-4c35-4491-b2d5-41fa0e545a34",
       },
@@ -286,29 +286,29 @@ export default function AdminApisPage() {
     responseSchemaText: "",
   });
 
-  // Fast Raw Integrator (Zoop Paste Studio) state
+  // Fast Raw Integrator (Upstream Studio) state
   const [fastMode, setFastMode] = useState<"fast" | "advanced">("fast");
   const [fastForm, setFastForm] = useState({
     name: "",
     colladomePath: "/pan-verification/v1/",
-    upstreamUrl: "https://test.zoop.one/api/v1/in/identity/pan/lite",
+    upstreamUrl: "https://api.upstream-provider.com/api/v1/in/identity/pan/lite",
     providerId: "",
     httpMethod: "POST",
-    bodyText: ZOOP_PRESETS[1].bodyText,
-    responseText: ZOOP_PRESETS[1].responseText,
+    bodyText: GATEWAY_PRESETS[1].bodyText,
+    responseText: GATEWAY_PRESETS[1].responseText,
     sellPrice: 2.2,
     costPrice: 1.2,
     categoryId: "",
   });
 
-  const handleLoadPreset = (preset: (typeof ZOOP_PRESETS)[0]) => {
+  const handleLoadPreset = (preset: (typeof GATEWAY_PRESETS)[0]) => {
     const matchedCat = categories.find((c) => c.slug === preset.categorySlug);
-    const zoopProv = providers.find((p) => p.code === "ZOOP") || providers[0];
+    const primaryProv = providers.find((p) => p.code === "ZOOP") || providers[0];
     setFastForm({
       name: preset.name,
       colladomePath: preset.colladomePath,
       upstreamUrl: preset.upstreamUrl,
-      providerId: zoopProv?.id || fastForm.providerId,
+      providerId: primaryProv?.id || fastForm.providerId,
       httpMethod: preset.httpMethod,
       bodyText: preset.bodyText,
       responseText: preset.responseText,
@@ -342,11 +342,11 @@ export default function AdminApisPage() {
       return;
     }
 
-    // 1. Parse & Auto-Morph Request JSON (replace "via ZOOP API" -> "via Colladome API")
+    // 1. Parse & Auto-Morph Request JSON (ensure "via Colladome API")
     let parsedBody: any = {};
     try {
       const morphedReqText = (fastForm.bodyText || "{}").replace(
-        /via ZOOP API/gi,
+        /via (ZOOP|IDFY|DECENTRO|SURPASS) API/gi,
         "via Colladome API"
       );
       parsedBody = JSON.parse(morphedReqText);
@@ -355,7 +355,7 @@ export default function AdminApisPage() {
       return;
     }
 
-    // Build structured parameter schema (supports Zoop's { mode, data: {...}, task_id } envelope)
+    // Build structured parameter schema (supports upstream { mode, data: {...}, task_id } envelope)
     const schemaObj: any = {};
     Object.keys(parsedBody).forEach((k) => {
       const val = parsedBody[k];
@@ -484,15 +484,15 @@ export default function AdminApisPage() {
         const provList = provData.providers || apiData.providers || [];
         setProviders(provList);
 
-        const zoopProv = provList.find((p: any) => p.code === "ZOOP") || provList[0];
-        if (zoopProv && !fastForm.providerId) {
-          setFastForm((prev) => ({ ...prev, providerId: zoopProv.id }));
+        const primaryProv = provList.find((p: any) => p.code === "ZOOP") || provList[0];
+        if (primaryProv && !fastForm.providerId) {
+          setFastForm((prev) => ({ ...prev, providerId: primaryProv.id }));
         }
         if (apiData.categories?.length > 0 && !form.categoryId) {
           setForm((prev) => ({
             ...prev,
             categoryId: apiData.categories[0].id,
-            primaryProviderId: zoopProv?.id || "",
+            primaryProviderId: primaryProv?.id || "",
             secondaryProviderId: provList[1]?.id || "",
           }));
         }
@@ -581,7 +581,7 @@ export default function AdminApisPage() {
         <div>
           <h1 className="text-2xl font-bold text-neutral-900 tracking-tight">API Studio & Upstream Routing</h1>
           <p className="text-xs text-neutral-500 mt-1">
-            Morph 3rd-party provider endpoints (Zoop, IDFY, Decentro, Surpass) into Colladome Gateway routes with auto failover
+            Morph upstream provider endpoints into Colladome Gateway routes with auto failover
           </p>
         </div>
 
@@ -636,7 +636,7 @@ export default function AdminApisPage() {
               className="px-3 py-1.5 rounded-lg bg-black hover:bg-neutral-800 text-white text-xs font-semibold shadow-sm transition flex items-center gap-1.5"
             >
               <Plus className="w-3.5 h-3.5" />
-              <span>Morph New Zoop / Raw Endpoint</span>
+              <span>Morph New Upstream Endpoint</span>
             </button>
           </div>
 
@@ -689,7 +689,7 @@ export default function AdminApisPage() {
                         <div className="flex items-center gap-1.5">
                           <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
                           <span className="font-semibold text-neutral-900">
-                            {primaryMapping?.provider?.name || "Zoop.one"}
+                            {primaryMapping?.provider?.name || "Primary Gateway"}
                           </span>
                         </div>
                         <div className="text-[10px] text-neutral-400 font-mono truncate mt-0.5 max-w-[180px]">
@@ -765,7 +765,7 @@ export default function AdminApisPage() {
               }`}
             >
               <Zap className="w-3.5 h-3.5 text-amber-400" />
-              <span>⚡ Zoop / Raw Endpoint Morpher Studio (Paste Mode)</span>
+              <span>⚡ Upstream API Morpher Studio (Paste Mode)</span>
             </button>
             <button
               type="button"
@@ -782,26 +782,26 @@ export default function AdminApisPage() {
           </div>
 
           {fastMode === "fast" ? (
-            /* Fast Zoop / Raw Morpher Studio */
+            /* Fast Upstream Morpher Studio */
             <form onSubmit={handleFastIntegrate} className="p-6 space-y-6">
               <div className="flex flex-wrap items-center justify-between gap-4 pb-4 border-b border-neutral-100">
                 <div>
                   <h2 className="font-bold text-sm text-neutral-900 flex items-center gap-2">
                     <Zap className="w-4 h-4 text-amber-500" />
-                    <span>Zoop & Upstream API Morpher Studio</span>
+                    <span>Upstream API Morpher Studio</span>
                   </h2>
                   <p className="text-xs text-neutral-500 mt-0.5">
-                    Paste any Zoop URL and sample Request/Response JSON. Colladome automatically morphs the URL, rewrites consent text, injects your Zoop <code>app-id</code> &amp; <code>api-key</code>, and strips vendor IDs!
+                    Paste any upstream URL and sample Request/Response JSON. Colladome automatically morphs the URL, rewrites consent text, injects credentials, and strips vendor IDs!
                   </p>
                 </div>
 
-                {/* 1-Click Zoop Preset Loaders */}
+                {/* 1-Click Gateway Preset Loaders */}
                 <div className="flex flex-wrap items-center gap-1.5">
                   <span className="text-[11px] font-bold text-neutral-500 flex items-center gap-1 mr-1">
                     <Sparkles className="w-3.5 h-3.5 text-amber-500" />
-                    <span>1-Click Zoop Presets:</span>
+                    <span>1-Click Gateway Presets:</span>
                   </span>
-                  {ZOOP_PRESETS.map((preset) => (
+                  {GATEWAY_PRESETS.map((preset) => (
                     <button
                       key={preset.id}
                       type="button"
@@ -851,13 +851,13 @@ export default function AdminApisPage() {
                   <input
                     type="url"
                     required
-                    placeholder="https://test.zoop.one/api/v1/in/identity/pan/lite"
+                    placeholder="https://api.upstream-provider.com/api/v1/in/identity/pan/lite"
                     value={fastForm.upstreamUrl}
                     onChange={(e) => setFastForm({ ...fastForm, upstreamUrl: e.target.value })}
                     className="w-full text-xs font-mono border border-neutral-300 rounded-lg p-2.5 focus:outline-none focus:border-black"
                   />
                   <span className="text-[10px] text-neutral-400">
-                    Colladome forwards morphed payload here with your Zoop <code>app-id</code> &amp; <code>api-key</code>
+                    Colladome forwards morphed payload here with your upstream credentials &amp; headers
                   </span>
                 </div>
 
@@ -931,7 +931,7 @@ export default function AdminApisPage() {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-bold text-neutral-800 mb-1">
-                    1. Paste Upstream Request Sample JSON (e.g. from Zoop Docs)
+                    1. Paste Upstream Request Sample JSON
                   </label>
                   <textarea
                     rows={10}
@@ -940,7 +940,7 @@ export default function AdminApisPage() {
                     className="w-full font-mono text-xs border border-neutral-300 rounded-lg p-3 text-neutral-900 bg-neutral-50"
                   />
                   <p className="text-[11px] text-neutral-500 mt-1">
-                    Automatically rewrites <code>&quot;via ZOOP API&quot;</code> → <code>&quot;via Colladome API&quot;</code> and extracts nested <code>data.*</code> parameters for the Client Catalog!
+                    Automatically normalizes consent text → <code>&quot;via Colladome API&quot;</code> and extracts nested <code>data.*</code> parameters for the Client Catalog!
                   </p>
                 </div>
 
@@ -981,11 +981,11 @@ export default function AdminApisPage() {
                     <strong>2. Gateway Auth &amp; Billing:</strong> Validates client API key, IP whitelist, and wallet balance ≥ ₹{fastForm.sellPrice.toFixed(2)}.
                   </div>
                   <div>
-                    <strong>3. Upstream Morphing:</strong> Injects Colladome&apos;s Zoop <code>app-id</code> &amp; <code>api-key</code> headers and forwards to{" "}
+                    <strong>3. Upstream Morphing:</strong> Injects Colladome&apos;s upstream credentials &amp; headers and forwards to{" "}
                     <code className="text-amber-300">{fastForm.upstreamUrl}</code>.
                   </div>
                   <div>
-                    <strong>4. Response Sanitization:</strong> Stores Zoop&apos;s raw <code>task_id</code>, <code>group_id</code>, <code>request_id</code>, and <code>billable</code> flag in Admin Audit Logs, returning only <code>colladome_order_id</code>, <code>client_order_id</code>, and <code>result</code> to the client!
+                    <strong>4. Response Sanitization:</strong> Stores raw upstream <code>task_id</code>, <code>group_id</code>, <code>request_id</code>, and <code>billable</code> flag in Admin Audit Logs, returning only <code>colladome_order_id</code>, <code>client_order_id</code>, and <code>result</code> to the client!
                   </div>
                 </div>
               </div>
@@ -1298,17 +1298,17 @@ export default function AdminApisPage() {
                 <input
                   type="url"
                   required
-                  placeholder="https://live.zoop.one"
+                  placeholder="https://api.upstream-provider.com"
                   value={providerForm.baseUrl}
                   onChange={(e) => setProviderForm({ ...providerForm, baseUrl: e.target.value })}
                   className="w-full text-xs font-mono border border-neutral-300 rounded-lg p-2.5 focus:outline-none focus:border-neutral-500"
                 />
               </div>
 
-              {/* App ID (Zoop app-id header) */}
+              {/* App ID (Upstream app-id / client-id header) */}
               <div>
                 <label className="block text-xs font-semibold text-neutral-700 mb-1">
-                  Provider App ID (Zoop <code>app-id</code>)
+                  Provider App ID (<code>app-id</code> / Client ID)
                 </label>
                 <input
                   type="text"

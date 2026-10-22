@@ -239,7 +239,7 @@ export default function HomePage() {
           </h1>
 
           <p className="text-base sm:text-lg text-slate-600 max-w-2xl mx-auto leading-relaxed">
-            Aggregate and re-sell verification APIs from top providers (Zoop, IDFY, Decentro, Surpass)
+            Access high-throughput verification APIs across banking networks, national registries, and compliance databases
             under your own domain:{" "}
             <code className="text-slate-900 font-mono text-sm bg-white px-2 py-0.5 rounded border border-slate-300">
               api.colladome.com
@@ -287,16 +287,16 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* 2. Upstream Provider Aggregation Strip */}
+      {/* 2. Official Network & Registry Coverage Strip */}
       <section className="py-8 bg-white border-b border-slate-200">
         <div className="max-w-6xl mx-auto px-4 flex flex-wrap items-center justify-between gap-6 text-xs text-slate-400 font-mono uppercase tracking-wider">
-          <span className="font-semibold text-slate-700 font-sans">Aggregated Upstream Providers:</span>
-          <span>ZOOP.ONE</span>
-          <span>IDFY (BALDOR)</span>
-          <span>DECENTRO</span>
-          <span>SURPASS DATA</span>
-          <span>UIDAI OKYC</span>
-          <span>NSDL PAN</span>
+          <span className="font-semibold text-slate-700 font-sans">Official Verification Coverage:</span>
+          <span>NPCI / IMPS</span>
+          <span>RBI REGISTERED</span>
+          <span>INCOME TAX DEPT</span>
+          <span>MCA / ROC</span>
+          <span>GST NETWORK (GSTN)</span>
+          <span>NSDL / UTITSL</span>
         </div>
       </section>
 
