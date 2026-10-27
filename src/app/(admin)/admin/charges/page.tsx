@@ -31,6 +31,7 @@ export default function AdminChargesPage() {
   const handleUpdateCharges = async (apiId: string) => {
     const costInput = (document.getElementById(`cost_${apiId}`) as HTMLInputElement)?.value;
     const sellInput = (document.getElementById(`sell_${apiId}`) as HTMLInputElement)?.value;
+    const setupInput = (document.getElementById(`setup_${apiId}`) as HTMLInputElement)?.value;
 
     setSavingId(apiId);
     try {
@@ -41,6 +42,7 @@ export default function AdminChargesPage() {
           apiId,
           defaultCostPrice: Number(costInput),
           defaultSellPrice: Number(sellInput),
+          defaultSetupFee: Number(setupInput) || 0,
         }),
       });
       const data = await res.json();
@@ -126,6 +128,7 @@ export default function AdminChargesPage() {
                 <th className="p-3.5">Upstream Route</th>
                 <th className="p-3.5">Base Upstream Cost (₹)</th>
                 <th className="p-3.5">Retail Sell Price (₹)</th>
+                <th className="p-3.5">One-Time Setup Fee (₹)</th>
                 <th className="p-3.5">Standard Net Margin (₹)</th>
                 <th className="p-3.5 text-right">Action</th>
               </tr>
@@ -133,7 +136,7 @@ export default function AdminChargesPage() {
             <tbody className="divide-y divide-slate-100">
               {apis.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="p-8 text-center text-slate-400">
+                  <td colSpan={9} className="p-8 text-center text-slate-400">
                     No active APIs in catalog. Click &quot;Add / Morph New API&quot; to integrate an upstream endpoint.
                   </td>
                 </tr>
@@ -179,6 +182,18 @@ export default function AdminChargesPage() {
                             id={`sell_${api.id}`}
                             defaultValue={api.defaultSellPrice}
                             className="w-20 border border-slate-300 rounded px-2 py-1 font-mono font-bold text-emerald-600 focus:border-slate-900 focus:outline-none"
+                          />
+                        </div>
+                      </td>
+                      <td className="p-3.5">
+                        <div className="flex items-center gap-1">
+                          <span>₹</span>
+                          <input
+                            type="number"
+                            step="1"
+                            id={`setup_${api.id}`}
+                            defaultValue={api.defaultSetupFee ?? 0}
+                            className="w-24 border border-slate-300 rounded px-2 py-1 font-mono font-bold text-amber-700 bg-amber-50/40 focus:border-slate-900 focus:outline-none"
                           />
                         </div>
                       </td>

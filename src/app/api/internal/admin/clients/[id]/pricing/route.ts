@@ -7,10 +7,19 @@ export async function POST(
 ) {
   try {
     const body = await req.json();
-    const { apiId, customPrice, isEnabled } = body;
+    const { apiId, customPrice, customSetupFee, isSetupFeePaid, isEnabled } = body;
 
     if (!apiId || customPrice === undefined) {
       return NextResponse.json({ error: "apiId and customPrice are required." }, { status: 400 });
+    }
+
+    const setupFeeData: any = {};
+    if (customSetupFee !== undefined) {
+      setupFeeData.customSetupFee = customSetupFee === null || customSetupFee === "" ? null : Number(customSetupFee);
+    }
+    if (isSetupFeePaid !== undefined) {
+      setupFeeData.isSetupFeePaid = Boolean(isSetupFeePaid);
+      setupFeeData.setupFeePaidAt = isSetupFeePaid ? new Date() : null;
     }
 
     const rule = await db.clientPricing.upsert({
@@ -23,12 +32,14 @@ export async function POST(
       update: {
         customPrice: Number(customPrice),
         isEnabled: isEnabled ?? true,
+        ...setupFeeData,
       },
       create: {
         userId: params.id,
         apiId,
         customPrice: Number(customPrice),
         isEnabled: isEnabled ?? true,
+        ...setupFeeData,
       },
     });
 

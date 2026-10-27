@@ -2,6 +2,13 @@ import { NextRequest } from "next/server";
 import { db } from "@/lib/db";
 import { hashApiKey } from "@/lib/crypto";
 
+export interface ClientApiPricing {
+  id: string;
+  customPrice: number;
+  customSetupFee: number | null;
+  isSetupFeePaid: boolean;
+}
+
 export interface AuthenticatedClient {
   userId: string;
   userEmail: string;
@@ -15,6 +22,7 @@ export interface AuthenticatedClient {
   walletBalance: number;
   allowedIps: string[];
   pricingRules: Map<string, number>; // apiId -> customPrice
+  clientPricing: Map<string, ClientApiPricing>; // apiId -> full pricing detail
   clientOrderId: string | null;
   clientIp: string;
   webhookUrl: string | null;
@@ -106,6 +114,7 @@ export async function authenticateApiRequest(req: NextRequest): Promise<{
           walletBalance: user.wallet?.balance || 0,
           allowedIps: [],
           pricingRules: new Map(),
+          clientPricing: new Map(),
           clientOrderId: clientOrderId,
           clientIp: "127.0.0.1",
           webhookUrl: user.clientSettings?.webhookUrl || null,
@@ -188,12 +197,19 @@ export async function authenticateApiRequest(req: NextRequest): Promise<{
     };
   }
 
-  // Build pricing lookup map
+  // Build pricing lookup maps
   const pricingMap = new Map<string, number>();
+  const clientPricingMap = new Map<string, ClientApiPricing>();
   if (user.pricingRules) {
     for (const rule of user.pricingRules) {
       if (rule.isEnabled) {
         pricingMap.set(rule.apiId, rule.customPrice);
+        clientPricingMap.set(rule.apiId, {
+          id: rule.id,
+          customPrice: rule.customPrice,
+          customSetupFee: rule.customSetupFee,
+          isSetupFeePaid: rule.isSetupFeePaid,
+        });
       }
     }
   }
@@ -218,6 +234,7 @@ export async function authenticateApiRequest(req: NextRequest): Promise<{
       walletBalance: user.wallet?.balance || 0,
       allowedIps,
       pricingRules: pricingMap,
+      clientPricing: clientPricingMap,
       clientOrderId,
       clientIp,
       webhookUrl: user.clientSettings?.webhookUrl || null,

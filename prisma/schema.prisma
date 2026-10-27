@@ -128,6 +128,7 @@ model Api {
   status           String          @default("ACTIVE") // ACTIVE, MAINTENANCE, DEPRECATED
   defaultCostPrice Float           // e.g. 1.80 (Paid to provider)
   defaultSellPrice Float           // e.g. 2.50 (Selling price to client)
+  defaultSetupFee  Float           @default(0.0) // One-time setup fee (e.g. ₹1,000)
   requestSchema    String          @default("{}") // JSON schema for parameters & body
   responseSchema   String          @default("{}") // JSON schema for sanitized Colladome response
   providerMappings ApiProviderMapping[]
@@ -171,6 +172,9 @@ model ClientPricing {
   apiId            String
   api              Api             @relation(fields: [apiId], references: [id], onDelete: Cascade)
   customPrice      Float           // Custom price per hit
+  customSetupFee   Float?          // Custom one-time setup fee (null = use API default)
+  isSetupFeePaid   Boolean         @default(false)
+  setupFeePaidAt   DateTime?
   isEnabled        Boolean         @default(true)
   createdAt        DateTime        @default(now())
   updatedAt        DateTime        @updatedAt

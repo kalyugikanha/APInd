@@ -1,6 +1,7 @@
 import { PrismaClient } from "@prisma/client";
 import crypto from "crypto";
 import { ifscApiData } from "./ifscApi";
+import { panApiData } from "./panApi";
 
 const prisma = new PrismaClient();
 
@@ -77,6 +78,53 @@ async function syncCatalog() {
     console.log("✅ IFSC Code Verification API added to catalog.");
   } else {
     console.log("✅ IFSC Code Verification API already present.");
+  }
+
+  // 3. Ensure Identity category, Eko provider, and PAN Fetch API exist
+  const catIdentity = await prisma.apiCategory.upsert({
+    where: { slug: "identity-verification" },
+    update: {},
+    create: {
+      name: "Identity Verification",
+      slug: "identity-verification",
+      description: "Verify Indian identity documents including PAN, Aadhaar, Voter ID, and Passport.",
+      icon: "ShieldCheck",
+      sortOrder: 2,
+    },
+  });
+
+  let eko = await prisma.provider.findUnique({ where: { code: "EKO" } });
+  if (!eko) {
+    eko = await prisma.provider.create({
+      data: {
+        name: "Partner Gateway B",
+        code: "EKO",
+        baseUrl: "https://staging.eko.in",
+        authType: "EKO_HMAC",
+        credentialsEnc: encrypt(
+          JSON.stringify({
+            developerKey: process.env.EKO_DEVELOPER_KEY || "",
+            accessKey: process.env.EKO_ACCESS_KEY || "",
+            initiatorId: process.env.EKO_INITIATOR_ID || "9999999999",
+            isSimulation: !process.env.EKO_DEVELOPER_KEY,
+          })
+        ),
+        isActive: true,
+      },
+    });
+    console.log("✅ Partner Gateway B (Eko EPS) provider added.");
+  }
+
+  const existingPan = await prisma.api.findFirst({
+    where: {
+      OR: [{ slug: "pan-fetch" }, { endpointPath: "/pan-verification/v1" }],
+    },
+  });
+  if (!existingPan) {
+    await prisma.api.create({ data: panApiData(catIdentity.id, eko.id) });
+    console.log("✅ PAN Fetch & Verification API added to catalog.");
+  } else {
+    console.log("✅ PAN Fetch & Verification API already present.");
   }
 }
 
@@ -229,11 +277,31 @@ async function main() {
       isActive: true,
     },
   });
-  console.log("✅ Upstream providers initialized (Primary Gateway, Secondary Gateway, Backup Gateway, Direct Route).");
+  const provEko = await prisma.provider.create({
+    data: {
+      name: "Partner Gateway B",
+      code: "EKO",
+      baseUrl: "https://staging.eko.in",
+      authType: "EKO_HMAC",
+      credentialsEnc: encrypt(
+        JSON.stringify({
+          developerKey: process.env.EKO_DEVELOPER_KEY || "",
+          accessKey: process.env.EKO_ACCESS_KEY || "",
+          initiatorId: process.env.EKO_INITIATOR_ID || "9999999999",
+          isSimulation: !process.env.EKO_DEVELOPER_KEY,
+        })
+      ),
+      isActive: true,
+    },
+  });
+  console.log("✅ Upstream providers initialized (Primary Gateway, Partner Gateway B, Secondary Gateway, Backup Gateway, Direct Route).");
 
-  // 4. Official Real Gateway API: IFSC Code Verification
+  // 4. Official Real Gateway APIs: IFSC & PAN Fetch
   const apiIfsc = await prisma.api.create({ data: ifscApiData(catBanking.id, provZoop.id) });
   console.log(`✅ Production Gateway API initialized: ${apiIfsc.name} (${apiIfsc.endpointPath})`);
+
+  const apiPan = await prisma.api.create({ data: panApiData(catIdentity.id, provEko.id) });
+  console.log(`✅ Production Gateway API initialized: ${apiPan.name} (${apiPan.endpointPath})`);
 
   console.log("--------------------------------------------------");
   console.log("✨ CLEAN PRODUCTION INITIALIZATION COMPLETE!");

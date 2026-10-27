@@ -67,9 +67,12 @@ export async function PUT(req: NextRequest) {
 
     const updatedCreds = {
       ...currentCreds,
-      apiKey: apiKey !== undefined && apiKey !== "" ? apiKey : currentCreds.apiKey || "",
-      apiSecret: apiSecret !== undefined && apiSecret !== "" ? apiSecret : currentCreds.apiSecret || "",
-      appId: appId !== undefined && appId !== "" ? appId : currentCreds.appId || "",
+      apiKey: apiKey !== undefined && apiKey !== "" ? apiKey : (body.developerKey || currentCreds.apiKey || ""),
+      developerKey: body.developerKey || apiKey || currentCreds.developerKey || currentCreds.apiKey || "",
+      apiSecret: apiSecret !== undefined && apiSecret !== "" ? apiSecret : (body.accessKey || currentCreds.apiSecret || ""),
+      accessKey: body.accessKey || apiSecret || currentCreds.accessKey || currentCreds.apiSecret || "",
+      appId: appId !== undefined && appId !== "" ? appId : (body.initiatorId || currentCreds.appId || ""),
+      initiatorId: body.initiatorId || appId || currentCreds.initiatorId || currentCreds.appId || "",
       isSimulation: isSimulation !== undefined ? isSimulation : currentCreds.isSimulation,
     };
 

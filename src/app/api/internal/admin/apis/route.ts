@@ -42,6 +42,9 @@ export async function POST(req: NextRequest) {
           ...(body.defaultSellPrice !== undefined
             ? { defaultSellPrice: Number(body.defaultSellPrice) }
             : {}),
+          ...(body.defaultSetupFee !== undefined
+            ? { defaultSetupFee: Number(body.defaultSetupFee) }
+            : {}),
         },
       });
       return NextResponse.json({
@@ -61,6 +64,7 @@ export async function POST(req: NextRequest) {
       useCase,
       defaultCostPrice,
       defaultSellPrice,
+      defaultSetupFee = 0.0,
       requestSchema = "{}",
       responseSchema = "{}",
       primaryProviderId,
@@ -152,6 +156,7 @@ export async function POST(req: NextRequest) {
           status: "ACTIVE",
           defaultCostPrice: Number(defaultCostPrice) || 0.0,
           defaultSellPrice: Number(defaultSellPrice) || 2.5,
+          defaultSetupFee: Number(defaultSetupFee) || 0.0,
           requestSchema: reqSchemaStr,
           responseSchema: resSchemaStr,
           providerMappings: {
@@ -204,6 +209,7 @@ export async function POST(req: NextRequest) {
         status: "ACTIVE",
         defaultCostPrice: Number(defaultCostPrice) || 0.0,
         defaultSellPrice: Number(defaultSellPrice) || 2.5,
+        defaultSetupFee: Number(defaultSetupFee) || 0.0,
         requestSchema: reqSchemaStr,
         responseSchema: resSchemaStr,
         providerMappings: {
@@ -258,6 +264,7 @@ export async function PATCH(req: NextRequest) {
       httpMethod,
       defaultCostPrice,
       defaultSellPrice,
+      defaultSetupFee,
       status,
       description,
       requestSchema,
@@ -282,6 +289,7 @@ export async function PATCH(req: NextRequest) {
         ...(httpMethod !== undefined ? { httpMethod } : {}),
         ...(defaultCostPrice !== undefined ? { defaultCostPrice: Number(defaultCostPrice) } : {}),
         ...(defaultSellPrice !== undefined ? { defaultSellPrice: Number(defaultSellPrice) } : {}),
+        ...(defaultSetupFee !== undefined ? { defaultSetupFee: Number(defaultSetupFee) } : {}),
         ...(status !== undefined ? { status } : {}),
         ...(description !== undefined ? { description } : {}),
         ...(requestSchema !== undefined

@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { authenticateApiRequest, AuthenticatedClient } from "@/lib/gateway/auth";
-import { deductWalletForApiHit } from "@/lib/gateway/wallet";
+import { deductWalletForApiHit, deductWalletForSetupFee } from "@/lib/gateway/wallet";
 import { generateOrderId, decrypt } from "@/lib/crypto";
+import { generateEkoHeaders } from "@/lib/gateway/eko";
 import {
   generateMockPanResponse,
   generateMockBankResponse,
@@ -105,6 +106,12 @@ export async function handleGatewayRequest(
     strippedApiPath === "/ifsc-verification/v1" ||
     strippedApiPath === "/v1/utility/ifsc";
 
+  const isPanPath =
+    normalizedPath.includes("pan") ||
+    strippedApiPath === "/pan-verification/v1" ||
+    strippedApiPath === "/pan-fetch/v1" ||
+    strippedApiPath === "/v1/verification/pan";
+
   const candidatePaths = Array.from(
     new Set([
       normalizedPath,
@@ -112,6 +119,7 @@ export async function handleGatewayRequest(
       strippedApiPath,
       `${strippedApiPath}/`,
       ...(isIfscPath ? ["/ifsc-verification/v1", "/v1/utility/ifsc"] : []),
+      ...(isPanPath ? ["/pan-verification/v1", "/pan-fetch/v1", "/v1/verification/pan"] : []),
     ])
   );
 
@@ -121,6 +129,7 @@ export async function handleGatewayRequest(
       OR: [
         { endpointPath: { in: candidatePaths } },
         ...(isIfscPath ? [{ slug: "ifsc-verification" }] : []),
+        ...(isPanPath ? [{ slug: "pan-detailed-verification" }, { slug: "pan-fetch" }] : []),
       ],
     },
     include: {
@@ -190,20 +199,77 @@ export async function handleGatewayRequest(
     cleanIfsc = rawIfsc.trim().toUpperCase();
   }
 
-  // 5. Calculate Rate / Surcharge for this Client
-  const customPrice = client.pricingRules.get(api.id);
+  let cleanPan = "";
+  if (isPanPath) {
+    const rawPan =
+      rawData.pan_number ||
+      rawData.customer_pan_number ||
+      rawData.pan ||
+      rawData.pan_no ||
+      body.pan_number ||
+      body.customer_pan_number ||
+      body.pan ||
+      body.pan_no ||
+      req.nextUrl?.searchParams?.get("pan_number") ||
+      req.nextUrl?.searchParams?.get("pan");
+
+    if (rawPan && typeof rawPan === "string") {
+      cleanPan = rawPan.replace(/[^a-zA-Z0-9]/g, "").toUpperCase();
+    }
+
+    if (cleanPan && cleanPan.length !== 10) {
+      return NextResponse.json(
+        {
+          success: false,
+          response_code: "104",
+          response_message:
+            "Invalid PAN Number. PAN must be a 10-character alphanumeric code (e.g. ABCDE1234F).",
+          colladome_order_id: colladomeOrderId,
+          client_order_id: clientTaskId,
+          result: null,
+          status: "FAILED",
+          data: null,
+          error: {
+            code: "VALIDATION_INVALID_PAN",
+            message: "Invalid PAN Number. PAN must be a 10-character alphanumeric code.",
+          },
+          request_timestamp: requestTimestamp,
+          response_timestamp: new Date().toISOString(),
+        },
+        { status: 400 }
+      );
+    }
+  }
+
+  // 5. Calculate Rate / Surcharge & Setup Fee for this Client
+  const clientRule = client.clientPricing?.get(api.id);
+  const customPrice = clientRule?.customPrice ?? client.pricingRules.get(api.id);
   const sellPrice = customPrice !== undefined ? customPrice : api.defaultSellPrice;
   const costPrice = api.defaultCostPrice;
   const marginProfit = Number((sellPrice - costPrice).toFixed(2));
 
+  // Determine One-Time Setup Fee
+  const customSetupFee = clientRule?.customSetupFee;
+  const setupFee =
+    customSetupFee !== null && customSetupFee !== undefined
+      ? customSetupFee
+      : (api.defaultSetupFee || 0);
+  const isSetupFeePaid = clientRule ? clientRule.isSetupFeePaid : false;
+  const needsSetupFeePayment = client.keyType === "PRODUCTION" && setupFee > 0 && !isSetupFeePaid;
+  const totalRequiredBalance = Number((sellPrice + (needsSetupFeePayment ? setupFee : 0)).toFixed(2));
+
   // 6. Check Wallet Balance (Only for PRODUCTION keys)
   if (client.keyType === "PRODUCTION") {
-    if (!client.walletId || client.walletBalance < sellPrice) {
+    if (!client.walletId || client.walletBalance < totalRequiredBalance) {
+      const msg = needsSetupFeePayment
+        ? `Insufficient wallet balance. Required: ₹${totalRequiredBalance.toFixed(2)} (API Hit: ₹${sellPrice.toFixed(2)} + One-Time API Setup Fee: ₹${setupFee.toFixed(2)}), Available: ₹${client.walletBalance.toFixed(2)}. Please recharge your wallet at dashboard.colladome.com.`
+        : `Insufficient wallet balance. Required: ₹${sellPrice.toFixed(2)}, Available: ₹${client.walletBalance.toFixed(2)}. Please recharge your wallet at dashboard.colladome.com.`;
+
       return NextResponse.json(
         {
           success: false,
           response_code: "103",
-          response_message: `Insufficient wallet balance. Required: ₹${sellPrice.toFixed(2)}, Available: ₹${client.walletBalance.toFixed(2)}. Please recharge your wallet at dashboard.colladome.com.`,
+          response_message: msg,
           colladome_order_id: colladomeOrderId,
           client_order_id: clientTaskId,
           result: null,
@@ -211,7 +277,7 @@ export async function handleGatewayRequest(
           data: null,
           error: {
             code: "BILLING_INSUFFICIENT_WALLET_BALANCE",
-            message: `Insufficient wallet balance. Required: ₹${sellPrice.toFixed(2)}, Available: ₹${client.walletBalance.toFixed(2)}.`,
+            message: msg,
           },
           request_timestamp: requestTimestamp,
           response_timestamp: new Date().toISOString(),
@@ -273,11 +339,52 @@ export async function handleGatewayRequest(
     }
   }
 
+  if (!isCachedHit && isPanPath && cleanPan && cleanPan.length === 10) {
+    try {
+      const existingPanRecord = await db.panReport.findFirst({
+        where: {
+          panNumber: cleanPan,
+          status: { in: ["VALID", "VERIFIED", "SUCCESS"] },
+        },
+        include: {
+          apiLog: true,
+        },
+        orderBy: {
+          createdAt: "desc",
+        },
+      });
+
+      if (existingPanRecord && existingPanRecord.fullName) {
+        responseData = {
+          pan_number: existingPanRecord.panNumber,
+          full_name: existingPanRecord.fullName,
+          category: existingPanRecord.category || "Individual",
+          status: "VALID",
+          pan_aadhaar_linked: existingPanRecord.panAadhaarLinked,
+          cached: true,
+          verification_date: existingPanRecord.createdAt.toISOString(),
+        };
+        status = "SUCCESS";
+        responseCode = "100";
+        responseMessage = "Valid Authentication";
+        responseStatus = 200;
+        providerOrderId = `CDO_CACHE_${existingPanRecord.id.slice(0, 8).toUpperCase()}`;
+        usedProviderId = existingPanRecord.apiLog?.providerId || null;
+        upstreamAttemptedAndHandled = true;
+        isCachedHit = true;
+      }
+    } catch (cacheErr: any) {
+      console.warn("PAN DB cache lookup failed, proceeding to live provider:", cacheErr?.message);
+    }
+  }
+
   // 7. Universal Multi-Provider Morpher Execution (with Primary -> Secondary Failover)
   if (!isCachedHit && client.keyType === "PRODUCTION" && api.providerMappings.length > 0) {
     for (const mapping of api.providerMappings) {
       const provider = mapping.provider;
       if (!provider || !provider.isActive) continue;
+
+      const isEkoProvider = provider.code === "EKO" || provider.authType === "EKO_HMAC";
 
       let appId = provider.code === "ZOOP" ? process.env.ZOOP_APP_ID || "" : "";
       let apiKey = provider.code === "ZOOP" ? process.env.ZOOP_API_KEY || "" : "";
@@ -288,6 +395,10 @@ export async function handleGatewayRequest(
       let isSimulation = false;
       let extraHeaders: Record<string, string> = {};
 
+      let developerKey = process.env.EKO_DEVELOPER_KEY || "";
+      let accessKey = process.env.EKO_ACCESS_KEY || "";
+      let initiatorId = process.env.EKO_INITIATOR_ID || "9999999999";
+
       try {
         const decryptedCreds = JSON.parse(decrypt(provider.credentialsEnc) || "{}");
         if (!appId && decryptedCreds.appId) appId = decryptedCreds.appId;
@@ -297,9 +408,31 @@ export async function handleGatewayRequest(
         if (decryptedCreds.headers && typeof decryptedCreds.headers === "object") {
           extraHeaders = decryptedCreds.headers;
         }
+
+        if (isEkoProvider) {
+          if (decryptedCreds.developerKey) developerKey = decryptedCreds.developerKey;
+          if (decryptedCreds.developer_key) developerKey = decryptedCreds.developer_key;
+          if (decryptedCreds.apiKey && !developerKey) developerKey = decryptedCreds.apiKey;
+
+          if (decryptedCreds.accessKey) accessKey = decryptedCreds.accessKey;
+          if (decryptedCreds.access_key) accessKey = decryptedCreds.access_key;
+          if (decryptedCreds.apiSecret && !accessKey) accessKey = decryptedCreds.apiSecret;
+
+          if (decryptedCreds.initiatorId) initiatorId = decryptedCreds.initiatorId;
+          if (decryptedCreds.initiator_id) initiatorId = decryptedCreds.initiator_id;
+          if (decryptedCreds.appId && (!initiatorId || initiatorId === "9999999999")) initiatorId = decryptedCreds.appId;
+        }
       } catch {}
 
-      if (isSimulation || !apiKey) {
+      if (isSimulation) {
+        continue;
+      }
+
+      if (isEkoProvider && (!developerKey || !accessKey)) {
+        continue;
+      }
+
+      if (!isEkoProvider && !apiKey) {
         continue;
       }
 
@@ -320,7 +453,7 @@ export async function handleGatewayRequest(
 
       // Morph Colladome consent_text -> upstream provider consent_text (e.g. via ZOOP API)
       const morphedConsentText = consentText.replace(/via Colladome API/gi, "via ZOOP API");
-      const upstreamPayload = {
+      let upstreamPayload: any = {
         mode: body.mode || "sync",
         data: {
           ...rawData,
@@ -336,7 +469,19 @@ export async function handleGatewayRequest(
         ...extraHeaders,
       };
 
-      if (provider.code === "ZOOP") {
+      if (isEkoProvider) {
+        const ekoHeaders = generateEkoHeaders(developerKey, accessKey);
+        Object.assign(headers, ekoHeaders);
+
+        if (isPanPath || endpointPart.includes("fetch-pan")) {
+          upstreamPayload = {
+            initiator_id: initiatorId,
+            client_ref_id: colladomeOrderId,
+            pan_number: cleanPan || rawData.customer_pan_number || rawData.pan_number || rawData.pan,
+            source: "API",
+          };
+        }
+      } else if (provider.code === "ZOOP") {
         if (appId) headers["app-id"] = appId;
         headers["api-key"] = apiKey;
       } else if (provider.authType === "BEARER_TOKEN") {
@@ -362,37 +507,70 @@ export async function handleGatewayRequest(
         providerOrderId =
           rawUpstreamResponse?.task_id ||
           rawUpstreamResponse?.request_id ||
+          rawUpstreamResponse?.data?.upstream_rrn ||
           `${provider.code}_LIVE_${Date.now()}`;
 
-        const isUpstreamSuccess =
-          rawRes.ok &&
-          (rawUpstreamResponse?.success === true ||
-            rawUpstreamResponse?.response_code === "100" ||
-            rawUpstreamResponse?.status === "SUCCESS");
+        if (isEkoProvider) {
+          const isEkoSuccess =
+            rawRes.ok &&
+            (rawUpstreamResponse?.status === 0 ||
+              rawUpstreamResponse?.status === "0" ||
+              rawUpstreamResponse?.response_type_id === 0);
 
-        if (isUpstreamSuccess) {
-          responseData =
-            rawUpstreamResponse.result ??
-            rawUpstreamResponse.data ??
-            rawUpstreamResponse;
-          responseCode = "100";
-          responseMessage = rawUpstreamResponse.response_message || "Valid Authentication";
-          status = "SUCCESS";
-          responseStatus = 200;
-          upstreamAttemptedAndHandled = true;
-          break;
-        } else if (rawRes.status >= 400 && rawRes.status < 500) {
-          // 4xx validation or upstream client error — do not failover
-          status = "FAILED";
-          responseCode = rawUpstreamResponse?.response_code || "104";
-          responseMessage =
-            rawUpstreamResponse?.response_message ||
-            rawUpstreamResponse?.message ||
-            "Upstream validation failed";
-          responseStatus = rawRes.status;
-          responseData = null;
-          upstreamAttemptedAndHandled = true;
-          break;
+          if (isEkoSuccess && rawUpstreamResponse?.data) {
+            responseData = {
+              pan_number: rawUpstreamResponse.data.pan_no || cleanPan,
+              full_name: rawUpstreamResponse.data.fullname,
+              category: rawUpstreamResponse.data.category || "Individual",
+              status: rawUpstreamResponse.data.status || "VALID",
+              upstream_rrn: rawUpstreamResponse.data.upstream_rrn || null,
+            };
+            responseCode = "100";
+            responseMessage = rawUpstreamResponse.message || "Valid Authentication";
+            status = "SUCCESS";
+            responseStatus = 200;
+            upstreamAttemptedAndHandled = true;
+            break;
+          } else if (rawRes.status >= 400 && rawRes.status < 500) {
+            status = "FAILED";
+            responseCode = "104";
+            responseMessage = rawUpstreamResponse?.message || "Upstream PAN verification failed";
+            responseStatus = rawRes.status;
+            responseData = null;
+            upstreamAttemptedAndHandled = true;
+            break;
+          }
+        } else {
+          const isUpstreamSuccess =
+            rawRes.ok &&
+            (rawUpstreamResponse?.success === true ||
+              rawUpstreamResponse?.response_code === "100" ||
+              rawUpstreamResponse?.status === "SUCCESS");
+
+          if (isUpstreamSuccess) {
+            responseData =
+              rawUpstreamResponse.result ??
+              rawUpstreamResponse.data ??
+              rawUpstreamResponse;
+            responseCode = "100";
+            responseMessage = rawUpstreamResponse.response_message || "Valid Authentication";
+            status = "SUCCESS";
+            responseStatus = 200;
+            upstreamAttemptedAndHandled = true;
+            break;
+          } else if (rawRes.status >= 400 && rawRes.status < 500) {
+            // 4xx validation or upstream client error — do not failover
+            status = "FAILED";
+            responseCode = rawUpstreamResponse?.response_code || "104";
+            responseMessage =
+              rawUpstreamResponse?.response_message ||
+              rawUpstreamResponse?.message ||
+              "Upstream validation failed";
+            responseStatus = rawRes.status;
+            responseData = null;
+            upstreamAttemptedAndHandled = true;
+            break;
+          }
         }
         // On 5xx error, loop continues to next priority provider mapping (Failover)
       } catch (fetchErr: any) {
@@ -545,6 +723,21 @@ export async function handleGatewayRequest(
 
   // 8. Atomic Wallet Settlement (only for live production keys on success)
   if (client.keyType === "PRODUCTION" && status === "SUCCESS" && client.walletId) {
+    if (needsSetupFeePayment) {
+      const setupDeduction = await deductWalletForSetupFee(
+        client.walletId,
+        client.userId,
+        api.id,
+        api.name,
+        setupFee,
+        clientRule?.id,
+        sellPrice
+      );
+      if (!setupDeduction.success) {
+        console.error(`Failed to deduct setup fee for API ${api.name}:`, setupDeduction.error);
+      }
+    }
+
     const deduction = await deductWalletForApiHit(
       client.walletId,
       sellPrice,
@@ -620,19 +813,22 @@ export async function handleGatewayRequest(
             status: responseData.status || (status === "SUCCESS" ? "VERIFIED" : "FAILED"),
           },
         });
-      } else if (strippedApiPath.includes("pan") && responseData) {
+      } else if ((isPanPath || strippedApiPath.includes("pan")) && responseData) {
         await db.panReport.create({
           data: {
             apiLogId: log.id,
             userId: client.userId,
             panNumber:
               responseData.pan_number ||
+              responseData.pan_no ||
+              cleanPan ||
               responseData.customer_pan_number ||
               rawData.customer_pan_number ||
               rawData.pan_number ||
               "UNKNOWN",
             fullName:
               responseData.full_name ||
+              responseData.fullname ||
               responseData.user_full_name ||
               responseData.name_on_card ||
               null,

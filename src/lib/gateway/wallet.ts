@@ -76,6 +76,110 @@ export async function deductWalletForApiHit(
   }
 }
 
+export async function deductWalletForSetupFee(
+  walletId: string,
+  userId: string,
+  apiId: string,
+  apiName: string,
+  setupFeeAmount: number,
+  clientPricingId?: string,
+  defaultSellPrice: number = 0
+): Promise<WalletDeductionResult> {
+  if (setupFeeAmount <= 0) {
+    if (clientPricingId) {
+      await db.clientPricing.update({
+        where: { id: clientPricingId },
+        data: { isSetupFeePaid: true, setupFeePaidAt: new Date() },
+      });
+    }
+    return { success: true, balanceBefore: 0, balanceAfter: 0 };
+  }
+
+  try {
+    const result = await db.$transaction(async (tx) => {
+      const wallet = await tx.wallet.findUnique({
+        where: { id: walletId },
+      });
+
+      if (!wallet) {
+        throw new Error("WALLET_NOT_FOUND");
+      }
+
+      if (wallet.balance < setupFeeAmount) {
+        throw new Error("INSUFFICIENT_FUNDS_FOR_SETUP_FEE");
+      }
+
+      const balanceBefore = wallet.balance;
+      const balanceAfter = Number((wallet.balance - setupFeeAmount).toFixed(2));
+
+      await tx.wallet.update({
+        where: { id: walletId },
+        data: { balance: balanceAfter },
+      });
+
+      await tx.walletTransaction.create({
+        data: {
+          walletId,
+          amount: setupFeeAmount,
+          type: "DEBIT",
+          balanceBefore,
+          balanceAfter,
+          referenceId: `SETUP_${apiId.slice(0, 8).toUpperCase()}_${Date.now()}`,
+          description: `One-Time API Setup Fee: ${apiName}`,
+        },
+      });
+
+      if (clientPricingId) {
+        await tx.clientPricing.update({
+          where: { id: clientPricingId },
+          data: {
+            isSetupFeePaid: true,
+            setupFeePaidAt: new Date(),
+          },
+        });
+      } else {
+        await tx.clientPricing.upsert({
+          where: {
+            userId_apiId: {
+              userId,
+              apiId,
+            },
+          },
+          update: {
+            isSetupFeePaid: true,
+            setupFeePaidAt: new Date(),
+          },
+          create: {
+            userId,
+            apiId,
+            customPrice: defaultSellPrice,
+            isSetupFeePaid: true,
+            setupFeePaidAt: new Date(),
+          },
+        });
+      }
+
+      return {
+        balanceBefore,
+        balanceAfter,
+      };
+    });
+
+    return {
+      success: true,
+      balanceBefore: result.balanceBefore,
+      balanceAfter: result.balanceAfter,
+    };
+  } catch (err: any) {
+    return {
+      success: false,
+      balanceBefore: 0,
+      balanceAfter: 0,
+      error: err.message || "SETUP_FEE_DEDUCTION_FAILED",
+    };
+  }
+}
+
 /**
  * Manual Credit or Debit to client wallet by Super Admin
  */

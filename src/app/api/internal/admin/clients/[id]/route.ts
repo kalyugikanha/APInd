@@ -83,7 +83,14 @@ export async function GET(
         endpointPath: api.endpointPath,
         defaultCostPrice: api.defaultCostPrice,
         defaultSellPrice: api.defaultSellPrice,
+        defaultSetupFee: api.defaultSetupFee ?? 0,
         customPrice: customRule ? customRule.customPrice : api.defaultSellPrice,
+        customSetupFee: customRule?.customSetupFee ?? null,
+        effectiveSetupFee: customRule?.customSetupFee !== null && customRule?.customSetupFee !== undefined
+          ? customRule.customSetupFee
+          : (api.defaultSetupFee ?? 0),
+        isSetupFeePaid: customRule ? customRule.isSetupFeePaid : false,
+        setupFeePaidAt: customRule?.setupFeePaidAt || null,
         hasCustomPrice: !!customRule,
         isEnabled: customRule ? customRule.isEnabled : true,
       };

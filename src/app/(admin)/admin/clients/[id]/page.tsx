@@ -164,16 +164,28 @@ export default function Client360HubPage() {
   };
 
   // Pricing Rule Save Handler
-  const handlePricingSave = async (apiId: string, customPrice: number, isEnabled: boolean) => {
+  const handlePricingSave = async (
+    apiId: string,
+    customPrice: number,
+    isEnabled: boolean = true,
+    customSetupFee?: number | null,
+    isSetupFeePaid?: boolean
+  ) => {
     try {
       const res = await fetch(`/api/internal/admin/clients/${clientId}/pricing`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ apiId, customPrice, isEnabled }),
+        body: JSON.stringify({
+          apiId,
+          customPrice,
+          isEnabled,
+          customSetupFee,
+          isSetupFeePaid,
+        }),
       });
       const data = await res.json();
       if (res.ok) {
-        alert("Pricing rule updated!");
+        alert("Pricing and setup fee updated successfully!");
         fetchClientDetails();
       } else {
         alert(data.error || "Failed to update pricing");
@@ -485,10 +497,11 @@ export default function Client360HubPage() {
                   <th className="p-3">API Name</th>
                   <th className="p-3">Category</th>
                   <th className="p-3">Endpoint Path</th>
-                  <th className="p-3">Cost to Colladome</th>
                   <th className="p-3">Standard Retail</th>
                   <th className="p-3">Client Custom Price</th>
-                  <th className="p-3">Action</th>
+                  <th className="p-3">One-Time Setup Fee</th>
+                  <th className="p-3">Setup Fee Status</th>
+                  <th className="p-3 text-right">Action</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -497,26 +510,85 @@ export default function Client360HubPage() {
                     <td className="p-3 font-semibold text-slate-900">{item.apiName}</td>
                     <td className="p-3">{item.category}</td>
                     <td className="p-3 font-mono text-blue-600">{item.endpointPath}</td>
-                    <td className="p-3 font-mono text-slate-500">₹{item.defaultCostPrice.toFixed(2)}</td>
                     <td className="p-3 font-mono text-slate-700">₹{item.defaultSellPrice.toFixed(2)}</td>
                     <td className="p-3">
-                      <input
-                        type="number"
-                        step="0.05"
-                        defaultValue={item.customPrice}
-                        id={`price_${item.apiId}`}
-                        className="w-24 border border-slate-300 rounded px-2 py-1 font-bold text-emerald-600 focus:outline-none focus:border-blue-500"
-                      />
+                      <div className="flex items-center gap-1">
+                        <span>₹</span>
+                        <input
+                          type="number"
+                          step="0.05"
+                          defaultValue={item.customPrice}
+                          id={`price_${item.apiId}`}
+                          className="w-20 border border-slate-300 rounded px-2 py-1 font-bold text-emerald-600 focus:outline-none focus:border-blue-500"
+                        />
+                      </div>
                     </td>
                     <td className="p-3">
+                      <div className="flex items-center gap-1">
+                        <span>₹</span>
+                        <input
+                          type="number"
+                          step="1"
+                          placeholder={item.defaultSetupFee > 0 ? String(item.defaultSetupFee) : "0"}
+                          defaultValue={item.customSetupFee !== null && item.customSetupFee !== undefined ? item.customSetupFee : ""}
+                          id={`setup_${item.apiId}`}
+                          title={`Default API setup fee: ₹${item.defaultSetupFee}. Leave empty to use default.`}
+                          className="w-20 border border-slate-300 rounded px-2 py-1 font-bold text-amber-700 bg-amber-50/40 focus:outline-none focus:border-blue-500"
+                        />
+                      </div>
+                    </td>
+                    <td className="p-3">
+                      <div className="flex items-center gap-2">
+                        {item.isSetupFeePaid ? (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                            <CheckCircle2 className="w-3 h-3" />
+                            <span>Paid / Waived</span>
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-semibold bg-amber-50 text-amber-700 border border-amber-200">
+                            <Clock className="w-3 h-3" />
+                            <span>Pending (₹{item.effectiveSetupFee})</span>
+                          </span>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const priceVal = (document.getElementById(`price_${item.apiId}`) as HTMLInputElement)?.value;
+                            const setupVal = (document.getElementById(`setup_${item.apiId}`) as HTMLInputElement)?.value;
+                            handlePricingSave(
+                              item.apiId,
+                              Number(priceVal),
+                              true,
+                              setupVal !== "" ? Number(setupVal) : null,
+                              !item.isSetupFeePaid
+                            );
+                          }}
+                          className={`text-[11px] px-2 py-0.5 rounded font-semibold transition border ${
+                            item.isSetupFeePaid
+                              ? "bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100"
+                              : "bg-emerald-50 text-emerald-700 border-emerald-300 hover:bg-emerald-100"
+                          }`}
+                        >
+                          {item.isSetupFeePaid ? "Mark Pending" : "Waive / Mark Paid"}
+                        </button>
+                      </div>
+                    </td>
+                    <td className="p-3 text-right">
                       <button
                         onClick={() => {
-                          const val = (document.getElementById(`price_${item.apiId}`) as HTMLInputElement)?.value;
-                          handlePricingSave(item.apiId, Number(val), true);
+                          const priceVal = (document.getElementById(`price_${item.apiId}`) as HTMLInputElement)?.value;
+                          const setupVal = (document.getElementById(`setup_${item.apiId}`) as HTMLInputElement)?.value;
+                          handlePricingSave(
+                            item.apiId,
+                            Number(priceVal),
+                            true,
+                            setupVal !== "" ? Number(setupVal) : null,
+                            item.isSetupFeePaid
+                          );
                         }}
                         className="px-3 py-1 bg-blue-50 text-blue-600 hover:bg-blue-600 hover:text-white rounded font-semibold text-xs transition"
                       >
-                        Update Rate
+                        Update
                       </button>
                     </td>
                   </tr>

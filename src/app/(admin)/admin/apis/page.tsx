@@ -36,6 +36,7 @@ const GATEWAY_PRESETS = [
     httpMethod: "POST",
     costPrice: 0.5,
     sellPrice: 1.2,
+    setupFee: 0.0,
     categorySlug: "banking-financials",
     bodyText: JSON.stringify(
       {
@@ -88,6 +89,7 @@ const GATEWAY_PRESETS = [
     httpMethod: "POST",
     costPrice: 1.2,
     sellPrice: 2.2,
+    setupFee: 0.0,
     categorySlug: "identity-verification",
     bodyText: JSON.stringify(
       {
@@ -116,6 +118,42 @@ const GATEWAY_PRESETS = [
         task_id: "f26eb21e-4c35-4491-b2d5-41fa0e545a34",
         response_code: "100",
         response_message: "Valid Authentication",
+      },
+      null,
+      2
+    ),
+  },
+  {
+    id: "pan-fetch-eko",
+    label: "PAN Fetch (Partner Gateway B)",
+    name: "PAN Fetch Verification",
+    colladomePath: "/pan-verification/v1/",
+    upstreamUrl: "https://staging.eko.in/ekoapi/v3/tools/kyc/fetch-pan",
+    httpMethod: "POST",
+    costPrice: 1.3,
+    sellPrice: 2.2,
+    setupFee: 0.0,
+    categorySlug: "identity-verification",
+    bodyText: JSON.stringify(
+      {
+        initiator_id: "9999999999",
+        pan_number: "ABCDE1234F",
+      },
+      null,
+      2
+    ),
+    responseText: JSON.stringify(
+      {
+        status: 0,
+        response_type_id: 0,
+        message: "Success",
+        data: {
+          pan_no: "ABCDE1234F",
+          fullname: "RAHUL SHARMA",
+          category: "Individual",
+          status: "VALID",
+          upstream_rrn: "123456789",
+        },
       },
       null,
       2
@@ -278,6 +316,7 @@ export default function AdminApisPage() {
     useCase: "",
     defaultCostPrice: 0,
     defaultSellPrice: 0,
+    defaultSetupFee: 0,
     primaryProviderId: "",
     primaryEndpoint: "",
     secondaryProviderId: "",
@@ -298,6 +337,7 @@ export default function AdminApisPage() {
     responseText: GATEWAY_PRESETS[1].responseText,
     sellPrice: 2.2,
     costPrice: 1.2,
+    setupFee: 0,
     categoryId: "",
   });
 
@@ -314,6 +354,7 @@ export default function AdminApisPage() {
       responseText: preset.responseText,
       costPrice: preset.costPrice,
       sellPrice: preset.sellPrice,
+      setupFee: (preset as any).setupFee || 0,
       categoryId: matchedCat?.id || fastForm.categoryId,
     });
   };
@@ -436,6 +477,7 @@ export default function AdminApisPage() {
           httpMethod: fastForm.httpMethod,
           defaultCostPrice: Number(fastForm.costPrice) || 0,
           defaultSellPrice: Number(fastForm.sellPrice) || 2.0,
+          defaultSetupFee: Number(fastForm.setupFee) || 0,
           requestSchema: JSON.stringify(schemaObj, null, 2),
           responseSchema: JSON.stringify(sanitizedResponseSchema, null, 2),
           categoryId: fastForm.categoryId || undefined,
@@ -705,8 +747,13 @@ export default function AdminApisPage() {
                       <td className="py-3.5 px-3 font-semibold text-neutral-700">
                         ₹{api.defaultCostPrice.toFixed(2)}
                       </td>
-                      <td className="py-3.5 px-3 font-bold text-neutral-900">
-                        ₹{api.defaultSellPrice.toFixed(2)}
+                      <td className="py-3.5 px-3">
+                        <div className="font-bold text-neutral-900">₹{api.defaultSellPrice.toFixed(2)}</div>
+                        {api.defaultSetupFee > 0 && (
+                          <div className="text-[10px] font-semibold text-amber-700 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded inline-block mt-0.5">
+                            +₹{api.defaultSetupFee} setup
+                          </div>
+                        )}
                       </td>
                       <td className="py-3.5 px-3 font-bold">
                         <span className="text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded text-[11px]">
@@ -892,7 +939,7 @@ export default function AdminApisPage() {
                   </select>
                 </div>
 
-                <div className="grid grid-cols-3 gap-2">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                   <div>
                     <label className="block text-xs font-bold text-neutral-800 mb-1">Method</label>
                     <select
@@ -922,6 +969,16 @@ export default function AdminApisPage() {
                       value={fastForm.sellPrice}
                       onChange={(e) => setFastForm({ ...fastForm, sellPrice: parseFloat(e.target.value) || 0 })}
                       className="w-full text-xs border border-neutral-300 rounded-lg p-2.5 font-bold text-emerald-700"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-neutral-800 mb-1">Setup Fee (₹)</label>
+                    <input
+                      type="number"
+                      step="1"
+                      value={fastForm.setupFee}
+                      onChange={(e) => setFastForm({ ...fastForm, setupFee: parseFloat(e.target.value) || 0 })}
+                      className="w-full text-xs border border-neutral-300 rounded-lg p-2.5 font-bold text-amber-700 bg-amber-50/40"
                     />
                   </div>
                 </div>
@@ -1082,6 +1139,17 @@ export default function AdminApisPage() {
                     value={form.defaultSellPrice}
                     onChange={(e) => setForm({ ...form, defaultSellPrice: Number(e.target.value) })}
                     className="w-full text-xs border border-neutral-300 rounded-lg p-2.5 font-bold text-neutral-900"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-neutral-700 mb-1">One-Time Setup Fee (₹)</label>
+                  <input
+                    type="number"
+                    step="1"
+                    value={form.defaultSetupFee}
+                    onChange={(e) => setForm({ ...form, defaultSetupFee: Number(e.target.value) })}
+                    className="w-full text-xs border border-neutral-300 rounded-lg p-2.5 font-bold text-amber-700 bg-amber-50/40"
                   />
                 </div>
               </div>
@@ -1305,16 +1373,20 @@ export default function AdminApisPage() {
                 />
               </div>
 
-              {/* App ID (Upstream app-id / client-id header) */}
+              {/* App ID (Upstream app-id / client-id header / initiator-id) */}
               <div>
                 <label className="block text-xs font-semibold text-neutral-700 mb-1">
-                  Provider App ID (<code>app-id</code> / Client ID)
+                  {providerForm.authType === "EKO_HMAC"
+                    ? "Initiator ID (Eko Mobile Number / initiator_id)"
+                    : "Provider App ID (app-id / Client ID)"}
                 </label>
                 <input
                   type="text"
                   placeholder={
                     selectedProvider.appIdHint && selectedProvider.appIdHint !== "Not Configured"
-                      ? `Keep existing App ID (${selectedProvider.appIdHint}) or enter new`
+                      ? `Keep existing (${selectedProvider.appIdHint}) or enter new`
+                      : providerForm.authType === "EKO_HMAC"
+                      ? "e.g. 9999999999"
                       : "Enter upstream app-id"
                   }
                   value={providerForm.appId}
@@ -1323,16 +1395,20 @@ export default function AdminApisPage() {
                 />
               </div>
 
-              {/* API Key */}
+              {/* API Key / Developer Key */}
               <div>
                 <label className="block text-xs font-semibold text-neutral-700 mb-1">
-                  Provider API Key / Client ID
+                  {providerForm.authType === "EKO_HMAC"
+                    ? "Developer Key (Eko developer_key)"
+                    : "Provider API Key / Client ID"}
                 </label>
                 <input
                   type="password"
                   placeholder={
                     selectedProvider.keyHint !== "Not Configured"
                       ? `Keep existing encrypted key (${selectedProvider.keyHint}) or enter new`
+                      : providerForm.authType === "EKO_HMAC"
+                      ? "Enter Eko developer_key"
                       : "Enter upstream API key"
                   }
                   value={providerForm.apiKey}
@@ -1344,16 +1420,20 @@ export default function AdminApisPage() {
                 </p>
               </div>
 
-              {/* API Secret */}
+              {/* API Secret / Secret Access Key */}
               <div>
                 <label className="block text-xs font-semibold text-neutral-700 mb-1">
-                  Provider API Secret / App Secret
+                  {providerForm.authType === "EKO_HMAC"
+                    ? "Secret Access Key (Used for dynamic HMAC-SHA256 signature)"
+                    : "Provider API Secret / App Secret"}
                 </label>
                 <input
                   type="password"
                   placeholder={
                     selectedProvider.hasSecret
                       ? "Keep existing secret or enter new"
+                      : providerForm.authType === "EKO_HMAC"
+                      ? "Enter Eko secret access key"
                       : "Optional secret or token"
                   }
                   value={providerForm.apiSecret}
@@ -1375,6 +1455,7 @@ export default function AdminApisPage() {
                   <option value="HEADER_API_KEY">HEADER_API_KEY (x-api-key: [key])</option>
                   <option value="BEARER_TOKEN">BEARER_TOKEN (Authorization: Bearer [key])</option>
                   <option value="BASIC_AUTH">BASIC_AUTH (Basic [base64(key:secret)])</option>
+                  <option value="EKO_HMAC">EKO_HMAC (developer_key, secret-key HMAC-SHA256, initiator_id)</option>
                 </select>
               </div>
 
