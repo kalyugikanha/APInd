@@ -584,9 +584,16 @@ export async function handleGatewayRequest(
   // 7.1 Deterministic Simulation / Sandbox Morpher Fallback
   if (!upstreamAttemptedAndHandled) {
     const panInput =
+      cleanPan ||
       rawData.customer_pan_number ||
       rawData.pan_number ||
       rawData.pan ||
+      rawData.pan_no ||
+      body.pan_number ||
+      body.customer_pan_number ||
+      body.pan ||
+      body.pan_no ||
+      req.nextUrl?.searchParams?.get("pan_number") ||
       req.nextUrl?.searchParams?.get("pan");
     const accInput = rawData.bank_account_number || rawData.account_number;
     const ifscInput = rawData.bank_ifsc_code || rawData.ifsc_code || rawData.ifsc;
