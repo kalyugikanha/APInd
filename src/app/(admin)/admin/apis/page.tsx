@@ -29,7 +29,7 @@ import {
 const GATEWAY_PRESETS = [
   {
     id: "ifsc",
-    label: "IFSC Verification",
+    label: "IFSC Verification [ZO]",
     name: "IFSC Code Verification",
     colladomePath: "/ifsc-verification/v1/",
     upstreamUrl: "https://api.upstream-provider.com/api/v1/in/utility/ifsc/lite",
@@ -82,7 +82,7 @@ const GATEWAY_PRESETS = [
   },
   {
     id: "pan",
-    label: "PAN Verification",
+    label: "PAN Verification [ZO]",
     name: "PAN Detailed Verification",
     colladomePath: "/pan-verification/v1/",
     upstreamUrl: "https://api.upstream-provider.com/api/v1/in/identity/pan/lite",
@@ -124,15 +124,15 @@ const GATEWAY_PRESETS = [
     ),
   },
   {
-    id: "pan-fetch-eko",
-    label: "PAN Fetch (Partner Gateway B)",
+    id: "pan-fetch-ek",
+    label: "PAN Fetch [EK]",
     name: "PAN Fetch Verification",
     colladomePath: "/pan-verification/v1/",
     upstreamUrl: "https://staging.eko.in/ekoapi/v3/tools/kyc/fetch-pan",
     httpMethod: "POST",
     costPrice: 1.3,
     sellPrice: 2.2,
-    setupFee: 0.0,
+    setupFee: 5500.0,
     categorySlug: "identity-verification",
     bodyText: JSON.stringify(
       {
@@ -160,8 +160,83 @@ const GATEWAY_PRESETS = [
     ),
   },
   {
+    id: "pan-advanced",
+    label: "PAN Advanced Verification [EK]",
+    name: "PAN Advanced Verification",
+    colladomePath: "/pan-advanced/v1",
+    upstreamUrl: "https://staging.eko.in/ekoapi/v3/tools/kyc/pan-advanced",
+    httpMethod: "POST",
+    costPrice: 2.04,
+    sellPrice: 3.5,
+    setupFee: 5500.0,
+    categorySlug: "identity-verification",
+    bodyText: JSON.stringify(
+      {
+        initiator_id: "9999999999",
+        client_ref_id: "order_12345",
+        pan_number: "ABCDE1234F",
+        name: "RAHUL SHARMA",
+      },
+      null,
+      2
+    ),
+    responseText: JSON.stringify(
+      {
+        status: 0,
+        response_type_id: 0,
+        message: "Success",
+        data: {
+          registered_name: "RAHUL SHARMA",
+          pan_number: "ABCDE1234F",
+          type_of_holder: "Individual",
+          aadhaar_seeding_status: "OPERATIVE",
+          status: "VALID",
+        },
+      },
+      null,
+      2
+    ),
+  },
+  {
+    id: "bank-pennyless",
+    label: "Bank Account Pennyless [EK]",
+    name: "Bank Account Verification (Pennyless)",
+    colladomePath: "/bank-pennyless/v1",
+    upstreamUrl: "https://staging.eko.in/ekoapi/v3/tools/kyc/bank-acc-verify-pennyless",
+    httpMethod: "POST",
+    costPrice: 2.04,
+    sellPrice: 3.5,
+    setupFee: 5500.0,
+    categorySlug: "banking-financials",
+    bodyText: JSON.stringify(
+      {
+        initiator_id: "9999999999",
+        client_ref_id: "order_12345",
+        account: "123456789012",
+        ifsc: "HDFC0001234",
+      },
+      null,
+      2
+    ),
+    responseText: JSON.stringify(
+      {
+        status: 0,
+        response_type_id: 0,
+        message: "Success",
+        data: {
+          verified_beneficiary_name: "VIKRAM MALHOTRA",
+          bank_account_no: "123456789012",
+          bank_ifsc: "HDFC0001234",
+          status: "VERIFIED",
+        },
+      },
+      null,
+      2
+    ),
+  },
+  {
     id: "bav",
-    label: "Bank Penny Drop",
+    label: "Bank Penny Drop [ZO]",
     name: "Bank Account Penny Drop",
     colladomePath: "/bank-verification/v1/",
     upstreamUrl: "https://api.upstream-provider.com/api/v1/in/financial/bav/lite",
@@ -343,7 +418,11 @@ export default function AdminApisPage() {
 
   const handleLoadPreset = (preset: (typeof GATEWAY_PRESETS)[0]) => {
     const matchedCat = categories.find((c) => c.slug === preset.categorySlug);
-    const primaryProv = providers.find((p) => p.code === "ZOOP") || providers[0];
+    const isEk = preset.upstreamUrl.includes("eko") || preset.label.includes("[EK]");
+    const targetProvCode = isEk ? "EK" : "ZO";
+    const primaryProv =
+      providers.find((p) => p.code === targetProvCode || p.code === targetProvCode + "OP") ||
+      providers[0];
     setFastForm({
       name: preset.name,
       colladomePath: preset.colladomePath,
@@ -526,7 +605,7 @@ export default function AdminApisPage() {
         const provList = provData.providers || apiData.providers || [];
         setProviders(provList);
 
-        const primaryProv = provList.find((p: any) => p.code === "ZOOP") || provList[0];
+        const primaryProv = provList.find((p: any) => p.code === "ZO" || p.code === "ZOOP") || provList[0];
         if (primaryProv && !fastForm.providerId) {
           setFastForm((prev) => ({ ...prev, providerId: primaryProv.id }));
         }
@@ -1377,7 +1456,7 @@ export default function AdminApisPage() {
               <div>
                 <label className="block text-xs font-semibold text-neutral-700 mb-1">
                   {providerForm.authType === "EKO_HMAC"
-                    ? "Initiator ID (Eko Mobile Number / initiator_id)"
+                    ? "Initiator ID (EK Gateway Mobile Number / initiator_id)"
                     : "Provider App ID (app-id / Client ID)"}
                 </label>
                 <input
@@ -1399,7 +1478,7 @@ export default function AdminApisPage() {
               <div>
                 <label className="block text-xs font-semibold text-neutral-700 mb-1">
                   {providerForm.authType === "EKO_HMAC"
-                    ? "Developer Key (Eko developer_key)"
+                    ? "Developer Key (EK Gateway developer_key)"
                     : "Provider API Key / Client ID"}
                 </label>
                 <input
@@ -1408,7 +1487,7 @@ export default function AdminApisPage() {
                     selectedProvider.keyHint !== "Not Configured"
                       ? `Keep existing encrypted key (${selectedProvider.keyHint}) or enter new`
                       : providerForm.authType === "EKO_HMAC"
-                      ? "Enter Eko developer_key"
+                      ? "Enter EK developer_key"
                       : "Enter upstream API key"
                   }
                   value={providerForm.apiKey}
@@ -1424,7 +1503,7 @@ export default function AdminApisPage() {
               <div>
                 <label className="block text-xs font-semibold text-neutral-700 mb-1">
                   {providerForm.authType === "EKO_HMAC"
-                    ? "Secret Access Key (Used for dynamic HMAC-SHA256 signature)"
+                    ? "Secret Access Key (EK HMAC-SHA256 Secret)"
                     : "Provider API Secret / App Secret"}
                 </label>
                 <input
@@ -1433,7 +1512,7 @@ export default function AdminApisPage() {
                     selectedProvider.hasSecret
                       ? "Keep existing secret or enter new"
                       : providerForm.authType === "EKO_HMAC"
-                      ? "Enter Eko secret access key"
+                      ? "Enter EK secret access key"
                       : "Optional secret or token"
                   }
                   value={providerForm.apiSecret}

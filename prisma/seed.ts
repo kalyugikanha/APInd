@@ -2,6 +2,8 @@ import { PrismaClient } from "@prisma/client";
 import crypto from "crypto";
 import { ifscApiData } from "./ifscApi";
 import { panApiData } from "./panApi";
+import { panAdvancedApiData } from "./panAdvancedApi";
+import { bankPennylessApiData } from "./bankPennylessApi";
 
 const prisma = new PrismaClient();
 
@@ -45,25 +47,22 @@ async function syncCatalog() {
     console.log(`🗑️  Removed legacy dummy API: ${legacy.name}`);
   }
 
-  // 2. Ensure Banking category, Zoop provider, and IFSC API exist
-  const catBanking = await prisma.apiCategory.upsert({
-    where: { slug: "banking-financials" },
-    update: {},
-    create: {
-      name: "Banking & Financials",
-      slug: "banking-financials",
-      description: "Instant IFSC bank branch lookups, penny drop account verification, and UPI validation.",
-      icon: "Building2",
-      sortOrder: 1,
-    },
+  // 2. Ensure Providers exist with whitelisted codes (ZO and EK)
+  await prisma.provider.updateMany({
+    where: { OR: [{ code: "ZOOP" }, { name: { contains: "Zoop" } }] },
+    data: { name: "Gateway ZO", code: "ZO" },
+  });
+  await prisma.provider.updateMany({
+    where: { OR: [{ code: "EKO" }, { name: { contains: "Eko" } }, { name: "Partner Gateway B" }] },
+    data: { name: "Gateway EK", code: "EK" },
   });
 
-  let zoop = await prisma.provider.findUnique({ where: { code: "ZOOP" } });
+  let zoop = await prisma.provider.findFirst({ where: { OR: [{ code: "ZO" }, { code: "ZOOP" }] } });
   if (!zoop) {
     zoop = await prisma.provider.create({
       data: {
-        name: "Primary Gateway",
-        code: "ZOOP",
+        name: "Gateway ZO",
+        code: "ZO",
         baseUrl: "https://test.zoop.one",
         authType: "HEADER_API_KEY",
         credentialsEnc: encrypt(JSON.stringify({ apiKey: "", appId: "", isSimulation: true })),
@@ -72,33 +71,12 @@ async function syncCatalog() {
     });
   }
 
-  const existingIfsc = await prisma.api.findUnique({ where: { slug: "ifsc-verification" } });
-  if (!existingIfsc) {
-    await prisma.api.create({ data: ifscApiData(catBanking.id, zoop.id) });
-    console.log("✅ IFSC Code Verification API added to catalog.");
-  } else {
-    console.log("✅ IFSC Code Verification API already present.");
-  }
-
-  // 3. Ensure Identity category, Eko provider, and PAN Fetch API exist
-  const catIdentity = await prisma.apiCategory.upsert({
-    where: { slug: "identity-verification" },
-    update: {},
-    create: {
-      name: "Identity Verification",
-      slug: "identity-verification",
-      description: "Verify Indian identity documents including PAN, Aadhaar, Voter ID, and Passport.",
-      icon: "ShieldCheck",
-      sortOrder: 2,
-    },
-  });
-
-  let eko = await prisma.provider.findUnique({ where: { code: "EKO" } });
+  let eko = await prisma.provider.findFirst({ where: { OR: [{ code: "EK" }, { code: "EKO" }] } });
   if (!eko) {
     eko = await prisma.provider.create({
       data: {
-        name: "Partner Gateway B",
-        code: "EKO",
+        name: "Gateway EK",
+        code: "EK",
         baseUrl: "https://staging.eko.in",
         authType: "EKO_HMAC",
         credentialsEnc: encrypt(
@@ -112,19 +90,67 @@ async function syncCatalog() {
         isActive: true,
       },
     });
-    console.log("✅ Partner Gateway B (Eko EPS) provider added.");
+    console.log("✅ Gateway EK provider added.");
   }
 
-  const existingPan = await prisma.api.findFirst({
-    where: {
-      OR: [{ slug: "pan-fetch" }, { endpointPath: "/pan-verification/v1" }],
+  // 3. Ensure Categories exist
+  const catBanking = await prisma.apiCategory.upsert({
+    where: { slug: "banking-financials" },
+    update: {},
+    create: {
+      name: "Banking & Financials",
+      slug: "banking-financials",
+      description: "Instant IFSC bank branch lookups, pennyless account verification, penny drop, and UPI validation.",
+      icon: "Building2",
+      sortOrder: 1,
     },
+  });
+
+  const catIdentity = await prisma.apiCategory.upsert({
+    where: { slug: "identity-verification" },
+    update: {},
+    create: {
+      name: "Identity Verification",
+      slug: "identity-verification",
+      description: "Verify Indian identity documents including PAN, Aadhaar, Voter ID, and Passport.",
+      icon: "ShieldCheck",
+      sortOrder: 2,
+    },
+  });
+
+  // 4. Ensure APIs exist
+  // A. IFSC Verification
+  const existingIfsc = await prisma.api.findUnique({ where: { slug: "ifsc-verification" } });
+  if (!existingIfsc) {
+    await prisma.api.create({ data: ifscApiData(catBanking.id, zoop.id) });
+    console.log("✅ IFSC Code Verification API added to catalog.");
+  }
+
+  // B. PAN Fetch & Verification
+  const existingPan = await prisma.api.findFirst({
+    where: { OR: [{ slug: "pan-fetch" }, { endpointPath: "/pan-verification/v1" }] },
   });
   if (!existingPan) {
     await prisma.api.create({ data: panApiData(catIdentity.id, eko.id) });
     console.log("✅ PAN Fetch & Verification API added to catalog.");
-  } else {
-    console.log("✅ PAN Fetch & Verification API already present.");
+  }
+
+  // C. PAN Advanced Verification
+  const existingPanAdvanced = await prisma.api.findFirst({
+    where: { OR: [{ slug: "pan-advanced" }, { endpointPath: "/pan-advanced/v1" }] },
+  });
+  if (!existingPanAdvanced) {
+    await prisma.api.create({ data: panAdvancedApiData(catIdentity.id, eko.id) });
+    console.log("✅ PAN Advanced Verification API added to catalog.");
+  }
+
+  // D. Bank Account Verification (Pennyless)
+  const existingBankPennyless = await prisma.api.findFirst({
+    where: { OR: [{ slug: "bank-pennyless" }, { endpointPath: "/bank-pennyless/v1" }] },
+  });
+  if (!existingBankPennyless) {
+    await prisma.api.create({ data: bankPennylessApiData(catBanking.id, eko.id) });
+    console.log("✅ Bank Account Verification (Pennyless) API added to catalog.");
   }
 }
 

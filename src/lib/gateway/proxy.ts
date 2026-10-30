@@ -106,11 +106,22 @@ export async function handleGatewayRequest(
     strippedApiPath === "/ifsc-verification/v1" ||
     strippedApiPath === "/v1/utility/ifsc";
 
+  const isPanAdvancedPath =
+    normalizedPath.includes("pan-advanced") ||
+    strippedApiPath === "/pan-advanced/v1" ||
+    strippedApiPath === "/v1/identity/pan-advanced";
+
+  const isBankPennylessPath =
+    normalizedPath.includes("bank-pennyless") ||
+    strippedApiPath === "/bank-pennyless/v1" ||
+    strippedApiPath === "/v1/banking/pennyless";
+
   const isPanPath =
-    normalizedPath.includes("pan") ||
-    strippedApiPath === "/pan-verification/v1" ||
-    strippedApiPath === "/pan-fetch/v1" ||
-    strippedApiPath === "/v1/verification/pan";
+    !isPanAdvancedPath &&
+    (normalizedPath.includes("pan") ||
+      strippedApiPath === "/pan-verification/v1" ||
+      strippedApiPath === "/pan-fetch/v1" ||
+      strippedApiPath === "/v1/verification/pan");
 
   const candidatePaths = Array.from(
     new Set([
@@ -119,6 +130,8 @@ export async function handleGatewayRequest(
       strippedApiPath,
       `${strippedApiPath}/`,
       ...(isIfscPath ? ["/ifsc-verification/v1", "/v1/utility/ifsc"] : []),
+      ...(isPanAdvancedPath ? ["/pan-advanced/v1", "/v1/identity/pan-advanced"] : []),
+      ...(isBankPennylessPath ? ["/bank-pennyless/v1", "/v1/banking/pennyless"] : []),
       ...(isPanPath ? ["/pan-verification/v1", "/pan-fetch/v1", "/v1/verification/pan"] : []),
     ])
   );
@@ -129,6 +142,8 @@ export async function handleGatewayRequest(
       OR: [
         { endpointPath: { in: candidatePaths } },
         ...(isIfscPath ? [{ slug: "ifsc-verification" }] : []),
+        ...(isPanAdvancedPath ? [{ slug: "pan-advanced" }] : []),
+        ...(isBankPennylessPath ? [{ slug: "bank-pennyless" }] : []),
         ...(isPanPath ? [{ slug: "pan-detailed-verification" }, { slug: "pan-fetch" }] : []),
       ],
     },
@@ -384,12 +399,13 @@ export async function handleGatewayRequest(
       const provider = mapping.provider;
       if (!provider || !provider.isActive) continue;
 
-      const isEkoProvider = provider.code === "EKO" || provider.authType === "EKO_HMAC";
+      const isEkoProvider = provider.code === "EK" || provider.code === "EKO" || provider.authType === "EKO_HMAC";
+      const isZoopProvider = provider.code === "ZO" || provider.code === "ZOOP";
 
-      let appId = provider.code === "ZOOP" ? process.env.ZOOP_APP_ID || "" : "";
-      let apiKey = provider.code === "ZOOP" ? process.env.ZOOP_API_KEY || "" : "";
+      let appId = isZoopProvider ? process.env.ZOOP_APP_ID || "" : "";
+      let apiKey = isZoopProvider ? process.env.ZOOP_API_KEY || "" : "";
       let baseUrl =
-        provider.code === "ZOOP"
+        isZoopProvider
           ? process.env.ZOOP_BASE_URL || provider.baseUrl || "https://test.zoop.one"
           : provider.baseUrl || "";
       let isSimulation = false;
@@ -473,7 +489,29 @@ export async function handleGatewayRequest(
         const ekoHeaders = generateEkoHeaders(developerKey, accessKey);
         Object.assign(headers, ekoHeaders);
 
-        if (isPanPath || endpointPart.includes("fetch-pan")) {
+        if (isPanAdvancedPath || endpointPart.includes("pan-advanced")) {
+          upstreamPayload = {
+            initiator_id: initiatorId,
+            client_ref_id: colladomeOrderId,
+            pan_number: cleanPan || rawData.customer_pan_number || rawData.pan_number || rawData.pan,
+            name: rawData.name || rawData.registered_name || rawData.customer_name || "Individual",
+          };
+        } else if (isBankPennylessPath || endpointPart.includes("bank-acc-verify-pennyless")) {
+          const accNumber = String(
+            rawData.account_number ||
+              rawData.account ||
+              rawData.bank_account_number ||
+              body.account_number ||
+              body.account ||
+              ""
+          ).trim();
+          upstreamPayload = {
+            initiator_id: initiatorId,
+            client_ref_id: colladomeOrderId,
+            account: accNumber,
+            ifsc: cleanIfsc || rawData.ifsc || rawData.ifsc_code || body.ifsc,
+          };
+        } else if (isPanPath || endpointPart.includes("fetch-pan")) {
           upstreamPayload = {
             initiator_id: initiatorId,
             client_ref_id: colladomeOrderId,
@@ -481,7 +519,7 @@ export async function handleGatewayRequest(
             source: "API",
           };
         }
-      } else if (provider.code === "ZOOP") {
+      } else if (isZoopProvider) {
         if (appId) headers["app-id"] = appId;
         headers["api-key"] = apiKey;
       } else if (provider.authType === "BEARER_TOKEN") {
@@ -518,13 +556,40 @@ export async function handleGatewayRequest(
               rawUpstreamResponse?.response_type_id === 0);
 
           if (isEkoSuccess && rawUpstreamResponse?.data) {
-            responseData = {
-              pan_number: rawUpstreamResponse.data.pan_no || cleanPan,
-              full_name: rawUpstreamResponse.data.fullname,
-              category: rawUpstreamResponse.data.category || "Individual",
-              status: rawUpstreamResponse.data.status || "VALID",
-              upstream_rrn: rawUpstreamResponse.data.upstream_rrn || null,
-            };
+            if (isPanAdvancedPath || endpointPart.includes("pan-advanced")) {
+              responseData = {
+                pan_number: rawUpstreamResponse.data.pan || cleanPan,
+                registered_name: rawUpstreamResponse.data.registered_name || rawUpstreamResponse.data.name_provided,
+                name_on_card: rawUpstreamResponse.data.name_pan_card || rawUpstreamResponse.data.registered_name,
+                first_name: rawUpstreamResponse.data.first_name,
+                last_name: rawUpstreamResponse.data.last_name,
+                category: rawUpstreamResponse.data.type || "Individual",
+                gender: rawUpstreamResponse.data.gender,
+                date_of_birth: rawUpstreamResponse.data.date_of_birth,
+                masked_aadhaar: rawUpstreamResponse.data.masked_aadhaar_number,
+                aadhaar_linked: rawUpstreamResponse.data.aadhaar_linked,
+                email: rawUpstreamResponse.data.email,
+                mobile_number: rawUpstreamResponse.data.mobile_number,
+                address: rawUpstreamResponse.data.address,
+                status: "VALID",
+              };
+            } else if (isBankPennylessPath || endpointPart.includes("bank-acc-verify-pennyless")) {
+              responseData = {
+                bank_account_no: rawUpstreamResponse.data.bank_account_no,
+                bank_ifsc: rawUpstreamResponse.data.bank_ifsc,
+                verified_beneficiary_name: rawUpstreamResponse.data.verified_beneficiary_name,
+                status: "VERIFIED",
+                account_active: true,
+              };
+            } else {
+              responseData = {
+                pan_number: rawUpstreamResponse.data.pan_no || cleanPan,
+                full_name: rawUpstreamResponse.data.fullname,
+                category: rawUpstreamResponse.data.category || "Individual",
+                status: rawUpstreamResponse.data.status || "VALID",
+                upstream_rrn: rawUpstreamResponse.data.upstream_rrn || null,
+              };
+            }
             responseCode = "100";
             responseMessage = rawUpstreamResponse.message || "Valid Authentication";
             status = "SUCCESS";
@@ -625,6 +690,61 @@ export async function handleGatewayRequest(
         response_message: responseMessage,
         request_timestamp: requestTimestamp,
         response_timestamp: new Date().toISOString(),
+      };
+    } else if (isPanAdvancedPath) {
+      responseData = {
+        pan_number: cleanPan || "ABCDE1234F",
+        registered_name: rawData.name || "RAJESH KUMAR",
+        name_on_card: rawData.name || "RAJESH KUMAR",
+        first_name: "RAJESH",
+        last_name: "KUMAR",
+        category: "Individual",
+        gender: "M",
+        date_of_birth: "1994-08-29",
+        masked_aadhaar: "XXXX XXXX 1234",
+        aadhaar_linked: true,
+        email: "ra******ar@example.com",
+        mobile_number: "98******10",
+        address: {
+          full_address: "Woodland Heights, Ghatkopar, Mumbai, Maharashtra 400072",
+          street: "Woodland Heights, Ghatkopar",
+          city: "Mumbai",
+          state: "Maharashtra",
+          pincode: 400072,
+          country: "India",
+        },
+        status: "VALID",
+      };
+      status = "SUCCESS";
+      responseCode = "100";
+      responseMessage = "Valid Authentication";
+      responseStatus = 200;
+      providerOrderId = `PROV_PAN_ADV_${Date.now()}`;
+      rawUpstreamResponse = {
+        result: responseData,
+        success: true,
+        response_code: "100",
+        response_message: "Valid Authentication",
+      };
+    } else if (isBankPennylessPath) {
+      const accNumber = String(rawData.account_number || rawData.account || "38759149196");
+      responseData = {
+        bank_account_no: accNumber,
+        bank_ifsc: cleanIfsc || rawData.ifsc || "SBIN0007515",
+        verified_beneficiary_name: rawData.beneficiary_name || "Master YASHWANT BASNETT",
+        status: "VERIFIED",
+        account_active: true,
+      };
+      status = "SUCCESS";
+      responseCode = "100";
+      responseMessage = "Valid Authentication";
+      responseStatus = 200;
+      providerOrderId = `PROV_BAV_PENNY_${Date.now()}`;
+      rawUpstreamResponse = {
+        result: responseData,
+        success: true,
+        response_code: "100",
+        response_message: "Valid Authentication",
       };
     } else if (strippedApiPath.includes("pan")) {
       const mock = generateMockPanResponse(panInput);

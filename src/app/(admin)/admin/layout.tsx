@@ -54,6 +54,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       items: [
         { label: "APIs & Providers Studio", href: "/admin/apis", icon: Layers },
         { label: "Charges & Pricing", href: "/admin/charges", icon: DollarSign },
+        { label: "API Subscriptions", href: "/admin/subscriptions", icon: ShieldCheck },
       ],
     },
     {

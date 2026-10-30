@@ -41,6 +41,7 @@ model User {
   documents       ClientDocument[]
   panReports      PanReport[]
   bankReports     BankReport[]
+  subscriptions   ApiSubscription[]
 
   internalNotes   String?
   createdAt       DateTime        @default(now())
@@ -133,6 +134,7 @@ model Api {
   responseSchema   String          @default("{}") // JSON schema for sanitized Colladome response
   providerMappings ApiProviderMapping[]
   clientPricings   ClientPricing[]
+  subscriptions    ApiSubscription[]
   apiLogs          ApiLog[]
   createdAt        DateTime        @default(now())
   updatedAt        DateTime        @updatedAt
@@ -263,3 +265,29 @@ model BankReport {
   @@index([userId, accountNumber])
   @@index([createdAt])
 }
+
+model ApiSubscription {
+  id             String    @id @default(uuid())
+  userId         String
+  user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  apiId          String
+  api            Api       @relation(fields: [apiId], references: [id], onDelete: Cascade)
+  setupFee       Float     @default(5500.0)
+  gstAmount      Float     @default(990.0)
+  totalAmount    Float     @default(6490.0)
+  utrNumber      String
+  paymentMethod  String    @default("IMPS") // IMPS, NEFT, RTGS, UPI
+  receiptUrl     String?   // Base64 data URI or uploaded receipt file
+  receiptName    String?
+  status         String    @default("PENDING") // PENDING, APPROVED, REJECTED
+  adminRemarks   String?
+  reviewedBy     String?
+  reviewedAt     DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@index([userId])
+  @@index([apiId])
+  @@index([status])
+}
+

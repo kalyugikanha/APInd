@@ -39,6 +39,10 @@ export async function GET(req: NextRequest) {
         wallet: true,
         apiKeys: { orderBy: { createdAt: "desc" } },
         clientSettings: true,
+        pricingRules: true,
+        subscriptions: {
+          orderBy: { createdAt: "desc" },
+        },
         _count: { select: { apiLogs: true, panReports: true, bankReports: true } },
       },
     });
@@ -75,6 +79,8 @@ export async function GET(req: NextRequest) {
           lowBalanceAlert: user.clientSettings?.lowBalanceAlert || 500,
         },
         apiKeys: user.apiKeys,
+        pricingRules: user.pricingRules,
+        subscriptions: user.subscriptions,
         stats: {
           totalHits: user._count.apiLogs ?? 0,
           totalPanHits: user._count.panReports ?? 0,
